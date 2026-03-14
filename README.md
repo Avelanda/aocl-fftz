@@ -125,7 +125,8 @@ SELECT_REAL_FFT_EXECUTION_ORDER     |  Selects the Real FFT Cooley-Tukey executi
 ENABLE_MULTI_THREADING              |  Compiles library with multi-threading support using OpenMP (Disabled by default)
 ENABLE_STRICT_WARNINGS              |  Enables compiler flags to treat all warnings as errors (Enabled by default)
 FUZZTEST                            |  Enables Compilation of fuzz test with fuzzing mode. Supported only on Linux Debug build with Clang compiler (Disabled by default)
-VALGRIND                            |  Enables memory checks using Valgrind. Supported only on Linux Debug build. Incompatible with ASAN=ON (Disabled by default)
+UBSAN                               |  Enables undefined behavior sanitizer checks. Supported only on Linux builds. Compatible with ASAN (Disabled by default)
+VALGRIND                            |  Enables memory checks using Valgrind. Supported only on Linux Debug build. Incompatible with sanitizers (Disabled by default)
 OpenMP_libomp_LIBRARY               |  Path to the custom OpenMP library (System OpenMP is used if not provided)
 
 
@@ -204,6 +205,32 @@ Here are a few sample commands that can be executed within the build directory t
  To run GTest test cases for a specific test case<br>
  `ctest -R <TEST CASE>`
 
+FFTW wrapper tests
+-------------------------------
+Build the wrapper and its GTest suite with strict warnings enabled:
+```
+cmake -S . -B build-wrapper \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DAOCL_TEST_COVERAGE=STANDARD \
+  -DBUILD_STATIC_LIBS=ON \
+  -DBUILD_THIRD_PARTY_WRAPPERS=ON \
+  -DENABLE_STRICT_WARNINGS=ON
+cmake --build build-wrapper --parallel
+```
+
+The test names use `KNOWN_DIVERGENCE` for explicit AOCL-vs-FFTW differences
+and `PRODUCTION_BLOCKED` for disabled regressions that depend on production
+fixes. The wisdom and miscellaneous suites also pin documented wrapper stubs.
+These groups can be selected directly by test-name regular expressions:
+```
+ctest --test-dir build-wrapper --output-on-failure \
+  -R "^FftwWrapper" \
+  -E "KNOWN_DIVERGENCE|FftwWrapperWisdomTest|FftwWrapperMiscTest|PRODUCTION_BLOCKED"
+ctest --test-dir build-wrapper --output-on-failure \
+  -R "KNOWN_DIVERGENCE|FftwWrapperWisdomTest|FftwWrapperMiscTest"
+ctest --test-dir build-wrapper -N -R PRODUCTION_BLOCKED
+```
+
 Running source code coverage using GCOV
 ---------------------------------------
 
@@ -221,8 +248,8 @@ Sample command to obtain code coverage report :
 cmake --build <build directory> --target install code-coverage
 ```
 
-Running Valgrind and ASAN memory checks using CTest
----------------------------------------------------
+Running Valgrind and sanitizer checks using CTest
+--------------------------------------------------
 
 To perform memory checks using Valgrind/ASAN, enable the relevant build options `VALGRIND` or `ASAN` while configuring CMake.<br>
 Please note that Valgrind and ASAN options cannot be enabled together and they are supported only in **Linux Debug build** mode.
@@ -249,6 +276,14 @@ cmake -B <build directory> <CMakeList.txt filepath> -DCMAKE_BUILD_TYPE=Debug -DA
 Run :
 ```
 ctest
+```
+
+ASAN and UBSAN can be combined in a single build:
+```
+cmake -S . -B build-asan-ubsan -DCMAKE_BUILD_TYPE=Debug \
+  -DASAN=ON -DUBSAN=ON -DBUILD_THIRD_PARTY_WRAPPERS=ON
+cmake --build build-asan-ubsan --parallel
+ctest --test-dir build-asan-ubsan --output-on-failure -R "^FftwWrapper"
 ```
 
 Generating Documentation
