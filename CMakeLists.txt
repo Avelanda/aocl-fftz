@@ -516,17 +516,17 @@ endif()
 # Add required OpenMP flags
 if(ENABLE_MULTI_THREADING)
     if(WIN32)
-        # PUBLIC on the OBJECT lib propagates OpenMP::OpenMP_C/CXX as INTERFACE
-        # link items to consumers (parent aggregation case).
-        target_link_libraries(fftz_objects PUBLIC OpenMP::OpenMP_C OpenMP::OpenMP_CXX)
+        # PUBLIC on the OBJECT lib propagates OpenMP::OpenMP_C as INTERFACE link
+        # items to consumers (parent aggregation case).
+        target_link_libraries(fftz_objects PUBLIC OpenMP::OpenMP_C)
         if(BUILD_STATIC_LIBS)
             # Static libraries must link OpenMP PUBLIC so that apps that link us get the runtime too.
-            target_link_libraries(${lib_name} PUBLIC OpenMP::OpenMP_C OpenMP::OpenMP_CXX)
+            target_link_libraries(${lib_name} PUBLIC OpenMP::OpenMP_C)
         else()
-            target_link_libraries(${lib_name} PRIVATE OpenMP::OpenMP_C OpenMP::OpenMP_CXX)
+            target_link_libraries(${lib_name} PRIVATE OpenMP::OpenMP_C)
         endif()
     else()
-        # On Unix: For custom path, link that file + -fopenmp and for system OpenMP, link OpenMP::OpenMP_C/OpenMP_CXX
+        # On Unix: For custom path, link that file + -fopenmp and for system OpenMP, link OpenMP::OpenMP_C
         # pkg-config uses -lomp/-lgomp in Libs.private.
         if(OpenMP_libomp_LIBRARY)
             # PUBLIC compile option so fftz_objects' own sources get -fopenmp AND
@@ -544,13 +544,13 @@ if(ENABLE_MULTI_THREADING)
                 target_link_libraries(${lib_name} PRIVATE ${OpenMP_libomp_LIBRARY})
             endif()
         else()
-            # System OpenMP: PUBLIC on fftz_objects so OpenMP::OpenMP_C/CXX is
+            # System OpenMP: PUBLIC on fftz_objects so OpenMP::OpenMP_C is
             # propagated to consumers (compile flags + runtime link).
-            target_link_libraries(fftz_objects PUBLIC OpenMP::OpenMP_C OpenMP::OpenMP_CXX)
+            target_link_libraries(fftz_objects PUBLIC OpenMP::OpenMP_C)
             if(BUILD_STATIC_LIBS)
-                target_link_libraries(${lib_name} PUBLIC OpenMP::OpenMP_C OpenMP::OpenMP_CXX)
+                target_link_libraries(${lib_name} PUBLIC OpenMP::OpenMP_C)
             else()
-                target_link_libraries(${lib_name} PRIVATE OpenMP::OpenMP_C OpenMP::OpenMP_CXX)
+                target_link_libraries(${lib_name} PRIVATE OpenMP::OpenMP_C)
             endif()
         endif()
     endif()
