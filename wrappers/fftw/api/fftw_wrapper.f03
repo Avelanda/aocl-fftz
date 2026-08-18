@@ -21,9 +21,6 @@
   integer(C_INT), parameter :: FFTW_PATIENT = 32
   integer(C_INT), parameter :: FFTW_ESTIMATE = 64
 
-  character(C_CHAR), dimension(128), bind(C, name='fftw_version') :: fftw_version
-  character(C_CHAR), dimension(128), bind(C, name='fftwf_version') :: fftwf_version
-
   type, bind(C) :: fftw_iodim
      integer(C_INT) n, is, os
   end type fftw_iodim
