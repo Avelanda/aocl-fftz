@@ -35,7 +35,14 @@ extern "C" {
 #define OPTION_PATIENT (1U << 5)
 #define OPTION_ESTIMATE (1U << 6)
 
+// Use C99 _Complex when <complex.h> is in scope; fall back to Real[2]
+// otherwise. Real must be a keyword (float/double), not a typedef.
+#if !defined(FFTW_NO_Complex) && defined(_Complex_I) && defined(complex) &&    \
+    defined(I)
+#define COMPLEX_TYPE(Real, Complex) typedef Real _Complex Complex
+#else
 #define COMPLEX_TYPE(Real, Complex) typedef Real Complex[2]
+#endif
 
 #define API_NAME_CONCAT(prefix, name) prefix ## name
 #define API_NAME_MANGLE_DOUBLE(name) API_NAME_CONCAT(fftw_, name)
@@ -237,8 +244,9 @@ extern "C" {
                                                                                \
     EXPORT_SYM_DYN extern const FFTZ_CHAR GEN(version)[];
 
-    FFTW_WRAPPER_API(API_NAME_MANGLE_DOUBLE, FFTZ_DOUBLE, fftw_complex)
-    FFTW_WRAPPER_API(API_NAME_MANGLE_FLOAT, FFTZ_FLOAT, fftwf_complex)
+    // Use float/double keywords so _Complex typedef is valid in C99.
+    FFTW_WRAPPER_API(API_NAME_MANGLE_DOUBLE, double, fftw_complex)
+    FFTW_WRAPPER_API(API_NAME_MANGLE_FLOAT, float, fftwf_complex)
 
 #define FFTW_FORWARD DIR_FORWARD
 #define FFTW_BACKWARD DIR_BACKWARD
