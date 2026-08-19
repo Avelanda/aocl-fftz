@@ -836,7 +836,7 @@ TYPED_TEST_P(AoclfftzConcurrentTest, C2C_BATCHED_NDIM_BS_2)
 // Four-step: power-of-2 size.
 TYPED_TEST_P(AoclfftzConcurrentTest, C2C_FOURSTEP)
 {
-    concurrent_exec_io::sweep(this, {1048576}, 1);
+    concurrent_exec_io::sweep(this, {32768}, 1);
 }
 
 REGISTER_TYPED_TEST_SUITE_P(

@@ -45,6 +45,7 @@ Member-by-Member Guide
 - **Constraints**:
 
   - Must not be ``NULL``.
+  - Must be allocated with sufficient memory to accommodate the dimensions and strides specified by ``dims`` and ``vecs``. Insufficient allocation may result in out-of-bounds memory access.
   - For in-place transforms (``flags.fft_placement == 0``), ``in`` and ``out`` must be the same pointer.
   - For out-of-place transforms (``flags.fft_placement == 1``), ``in`` and ``out`` must be different pointers.
 
