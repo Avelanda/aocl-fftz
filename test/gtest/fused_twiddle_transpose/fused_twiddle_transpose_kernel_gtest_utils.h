@@ -69,13 +69,13 @@ template <> struct tt_traits<aoclfftz_complex_d_t>
 enum tt_isa
 {
     TT_ISA_C = 0,
-#ifdef ENABLE_AVX128
+#if defined(AVX128_SUPPORTED) && defined(ENABLE_AVX128)
     TT_ISA_AVX128,
 #endif
-#ifdef ENABLE_AVX256
+#if defined(AVX256_SUPPORTED) && defined(ENABLE_AVX256)
     TT_ISA_AVX256,
 #endif
-#ifdef ENABLE_AVX512
+#if defined(AVX512_SUPPORTED) && defined(ENABLE_AVX512)
     TT_ISA_AVX512,
 #endif
 };
@@ -84,13 +84,13 @@ static const std::vector<std::pair<FFTZ_INT32, std::string>> &tt_isa_variants()
 {
     static const std::vector<std::pair<FFTZ_INT32, std::string>> variants = {
         {TT_ISA_C, "c"},
-#ifdef ENABLE_AVX128
+#if defined(AVX128_SUPPORTED) && defined(ENABLE_AVX128)
         {TT_ISA_AVX128, "avx128"},
 #endif
-#ifdef ENABLE_AVX256
+#if defined(AVX256_SUPPORTED) && defined(ENABLE_AVX256)
         {TT_ISA_AVX256, "avx256"},
 #endif
-#ifdef ENABLE_AVX512
+#if defined(AVX512_SUPPORTED) && defined(ENABLE_AVX512)
         {TT_ISA_AVX512, "avx512"},
 #endif
     };
@@ -107,15 +107,15 @@ fused_twiddle_transpose_ get_fused_twiddle_transpose_kernel(FFTZ_INT32 isa,
     {
     case TT_ISA_C:
         return register_fused_twiddle_transpose_c_wrapper(prec, direction);
-#ifdef ENABLE_AVX128
+#if defined(AVX128_SUPPORTED) && defined(ENABLE_AVX128)
     case TT_ISA_AVX128:
         return register_fused_twiddle_transpose_avx128_wrapper(prec, direction);
 #endif
-#ifdef ENABLE_AVX256
+#if defined(AVX256_SUPPORTED) && defined(ENABLE_AVX256)
     case TT_ISA_AVX256:
         return register_fused_twiddle_transpose_avx256_wrapper(prec, direction);
 #endif
-#ifdef ENABLE_AVX512
+#if defined(AVX512_SUPPORTED) && defined(ENABLE_AVX512)
     case TT_ISA_AVX512:
         return register_fused_twiddle_transpose_avx512_wrapper(prec, direction);
 #endif
