@@ -312,9 +312,9 @@ check_prime_solvability_bluestein(aoclfftz_decomp_scheme_t *decomp_scheme,
     return 0;
 }
 
-FFTZ_INT32 is_prime(FFTZ_INT32 n)
+FFTZ_INT32 is_prime(FFTZ_INTP n)
 {
-    for (FFTZ_INT32 i = 2; i * i <= n; i++)
+    for (FFTZ_INTP i = 2; i * i <= n; i++)
     {
         if (n % i == 0)
         {
@@ -380,9 +380,9 @@ FFTZ_INT32 check_bluestein_problem(aoclfftz_decomp_scheme_t *decomp_scheme)
     {
         FFTZ_INTP n = decomp_scheme->dims[i].n;
         // Check for prime factors greater than 13 in (n)
-        for (FFTZ_INT32 i = 17; i <= n; i++)
+        for (FFTZ_INTP j = 17; j <= n; j++)
         {
-            if (n % i == 0 && is_prime(i))
+            if (n % j == 0 && is_prime(j))
             {
                 return 1;
             }

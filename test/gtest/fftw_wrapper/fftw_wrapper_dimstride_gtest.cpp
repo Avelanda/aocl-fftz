@@ -598,6 +598,182 @@ TYPED_TEST(FftwWrapperDimStrideTest, PTEST_GURU64_DFT_BASIC)
     F::free_fn(ref);
 }
 
+// 0 howmany stride (length-1 batch) -> 1 in get_guru_dv_desc().
+TYPED_TEST(FftwWrapperDimStrideTest, PTEST_GURU_HOWMANY_ZERO_STRIDE)
+{
+    using F = FftwTypes<TypeParam>;
+    using iodim_t = typename F::iodim_t;
+    const int N = 16;
+    iodim_t dims[1] = {{N, 1, 1}};
+    iodim_t howmany[1] = {{1, 0, 0}};
+
+    auto *in  = F::alloc_complex(N);
+    auto *out = F::alloc_complex(N);
+    auto *ref = F::alloc_complex(N);
+    this->init_complex(in, N);
+
+    auto p = F::plan_guru_dft(1, dims, 1, howmany, in, out,
+                             FFTW_FORWARD, FFTW_ESTIMATE);
+    ASSERT_NE(p, nullptr);
+    F::execute(p);
+    dft_reference_1d(in, ref, N, FFTW_FORWARD);
+    compare_complex_arrays(ref, out, N, dft_tolerance<F>(N));
+
+    F::destroy_plan(p);
+    F::free_fn(in);
+    F::free_fn(out);
+    F::free_fn(ref);
+}
+
+// 64-bit twin: same 0 -> 1 howmany-stride mapping, via get_guru_64_dv_desc().
+TYPED_TEST(FftwWrapperDimStrideTest, PTEST_GURU64_HOWMANY_ZERO_STRIDE)
+{
+    using F = FftwTypes<TypeParam>;
+    using iodim64_t = typename F::iodim64_t;
+    const int N = 8;
+    iodim64_t dims[1] = {{N, 1, 1}};
+    iodim64_t howmany[1] = {{1, 0, 0}};
+
+    auto *in  = F::alloc_complex(N);
+    auto *out = F::alloc_complex(N);
+    auto *ref = F::alloc_complex(N);
+    this->init_complex(in, N);
+
+    auto p = F::plan_guru64_dft(1, dims, 1, howmany, in, out,
+                               FFTW_FORWARD, FFTW_ESTIMATE);
+    ASSERT_NE(p, nullptr);
+    F::execute(p);
+    dft_reference_1d(in, ref, N, FFTW_FORWARD);
+    compare_complex_arrays(ref, out, N, dft_tolerance<F>(N));
+
+    F::destroy_plan(p);
+    F::free_fn(in);
+    F::free_fn(out);
+    F::free_fn(ref);
+}
+
+// Guru r2c path: same 0 -> 1 howmany-stride mapping (get_guru_dv_desc()).
+TYPED_TEST(FftwWrapperDimStrideTest, PTEST_GURU_R2C_HOWMANY_ZERO_STRIDE)
+{
+    using F = FftwTypes<TypeParam>;
+    using iodim_t = typename F::iodim_t;
+    const int N = 16;
+    const int Nc = N / 2 + 1;
+    iodim_t dims[1] = {{N, 1, 1}};
+    iodim_t howmany[1] = {{1, 0, 0}};
+
+    auto *in  = F::alloc_real(N);
+    auto *out = F::alloc_complex(Nc);
+    auto *ref = F::alloc_complex(Nc);
+    this->init_real_iota(in, N);
+
+    auto p = F::plan_guru_dft_r2c(1, dims, 1, howmany, in, out,
+                                  FFTW_ESTIMATE);
+    ASSERT_NE(p, nullptr);
+    F::execute(p);
+    dft_reference_r2c_1d(in, ref, N);
+    compare_complex_arrays(ref, out, Nc, dft_tolerance<F>(N));
+
+    F::destroy_plan(p);
+    F::free_fn(in);
+    F::free_fn(out);
+    F::free_fn(ref);
+}
+
+// 64-bit guru r2c twin: 0 -> 1 mapping via get_guru_64_dv_desc().
+TYPED_TEST(FftwWrapperDimStrideTest, PTEST_GURU64_R2C_HOWMANY_ZERO_STRIDE)
+{
+    using F = FftwTypes<TypeParam>;
+    using iodim64_t = typename F::iodim64_t;
+    const int N = 8;
+    const int Nc = N / 2 + 1;
+    iodim64_t dims[1] = {{N, 1, 1}};
+    iodim64_t howmany[1] = {{1, 0, 0}};
+
+    auto *in  = F::alloc_real(N);
+    auto *out = F::alloc_complex(Nc);
+    auto *ref = F::alloc_complex(Nc);
+    this->init_real_iota(in, N);
+
+    auto p = F::plan_guru64_dft_r2c(1, dims, 1, howmany, in, out,
+                                    FFTW_ESTIMATE);
+    ASSERT_NE(p, nullptr);
+    F::execute(p);
+    dft_reference_r2c_1d(in, ref, N);
+    compare_complex_arrays(ref, out, Nc, dft_tolerance<F>(N));
+
+    F::destroy_plan(p);
+    F::free_fn(in);
+    F::free_fn(out);
+    F::free_fn(ref);
+}
+
+// Guru c2r path: same 0 -> 1 howmany-stride mapping (get_guru_dv_desc()).
+TYPED_TEST(FftwWrapperDimStrideTest, PTEST_GURU_C2R_HOWMANY_ZERO_STRIDE)
+{
+    using F = FftwTypes<TypeParam>;
+    using iodim_t = typename F::iodim_t;
+    const int N = 16;
+    const int Nc = N / 2 + 1;
+    iodim_t dims[1] = {{N, 1, 1}};
+    iodim_t howmany[1] = {{1, 0, 0}};
+
+    auto *real_in  = F::alloc_real(N);
+    auto *freq     = F::alloc_complex(Nc);
+    auto *real_out = F::alloc_real(N);
+    this->init_real_iota(real_in, N);
+
+    // Build a Hermitian spectrum with a plain r2c, then invert it through the
+    // guru c2r path under test; an unnormalized roundtrip scales by N.
+    auto pf = F::plan_dft_r2c_1d(N, real_in, freq, FFTW_ESTIMATE);
+    ASSERT_NE(pf, nullptr);
+    F::execute(pf);
+
+    auto p = F::plan_guru_dft_c2r(1, dims, 1, howmany, freq, real_out,
+                                  FFTW_ESTIMATE);
+    ASSERT_NE(p, nullptr);
+    F::execute(p);
+    compare_real_scaled(real_in, real_out, N, N, dft_tolerance<F>(N));
+
+    F::destroy_plan(pf);
+    F::destroy_plan(p);
+    F::free_fn(real_in);
+    F::free_fn(freq);
+    F::free_fn(real_out);
+}
+
+// 64-bit guru c2r twin: 0 -> 1 mapping via get_guru_64_dv_desc().
+TYPED_TEST(FftwWrapperDimStrideTest, PTEST_GURU64_C2R_HOWMANY_ZERO_STRIDE)
+{
+    using F = FftwTypes<TypeParam>;
+    using iodim64_t = typename F::iodim64_t;
+    const int N = 8;
+    const int Nc = N / 2 + 1;
+    iodim64_t dims[1] = {{N, 1, 1}};
+    iodim64_t howmany[1] = {{1, 0, 0}};
+
+    auto *real_in  = F::alloc_real(N);
+    auto *freq     = F::alloc_complex(Nc);
+    auto *real_out = F::alloc_real(N);
+    this->init_real_iota(real_in, N);
+
+    auto pf = F::plan_dft_r2c_1d(N, real_in, freq, FFTW_ESTIMATE);
+    ASSERT_NE(pf, nullptr);
+    F::execute(pf);
+
+    auto p = F::plan_guru64_dft_c2r(1, dims, 1, howmany, freq, real_out,
+                                    FFTW_ESTIMATE);
+    ASSERT_NE(p, nullptr);
+    F::execute(p);
+    compare_real_scaled(real_in, real_out, N, N, dft_tolerance<F>(N));
+
+    F::destroy_plan(pf);
+    F::destroy_plan(p);
+    F::free_fn(real_in);
+    F::free_fn(freq);
+    F::free_fn(real_out);
+}
+
 /* ====================================================================
  * Roundtrip dimension-consistency tests
  * ==================================================================== */

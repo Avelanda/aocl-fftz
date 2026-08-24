@@ -396,27 +396,9 @@ TYPED_TEST(FftwWrapperRobustnessTest, NTEST_MANY_DFT_NEGATIVE_HOWMANY)
     F::free_fn(out);
 }
 
-/* KNOWN AOCL-FFTZ WRAPPER DEFECT -- disabled until the production fix.
- *
- * A negative rank is undefined behavior in the current translator. In
- * get_many_dv_desc()/get_many_r2c_dv_desc()/get_many_c2r_dv_desc() the code
- * clamps effective_rank to 1 for the dims allocation:
- *     effective_rank = (rank > 0) ? rank : 1;   // allocates 1 dim
- * but the dim-initialization loop is `for (i = 0; i < rank; i++)` and the
- * early-out is `if (rank == 0)`. For rank < 0 neither runs, so dims[0] is
- * left UNINITIALIZED. The validator then reads indeterminate n/stride values;
- * when the garbage happens to look valid, the planner attempts a
- * garbage-sized transform and can HANG or crash the process.
- *
- * Because invoking plan_many_dft() with rank < 0 can hang, the regression is
- * committed as a DISABLED_ test. Its body contains the required NULL-plan
- * assertion and can be enabled as soon as the translator validates rank.
- *
- * SUGGESTED WRAPPER FIX: in every get_many_*_dv_desc() (and get_dv_desc()),
- * change `if (rank == 0)` to `if (rank <= 0)` so rank < 0 takes the same
- * safe unit-dimension path, or reject rank < 0 up front by returning NULL. */
-TYPED_TEST(FftwWrapperRobustnessTest,
-           DISABLED_PRODUCTION_BLOCKED_MANY_DFT_NEGATIVE_RANK)
+/* rank < 0 previously left dims[0] uninitialized -> could hang. Builders now
+ * reject it up front -> deterministic NULL plan. */
+TYPED_TEST(FftwWrapperRobustnessTest, NTEST_MANY_DFT_NEGATIVE_RANK)
 {
     using F = FftwTypes<TypeParam>;
     const int n[] = {8};
@@ -428,6 +410,24 @@ TYPED_TEST(FftwWrapperRobustnessTest,
         out, nullptr, 1, n[0], FFTW_FORWARD, FFTW_ESTIMATE);
     EXPECT_EQ(p, nullptr);
 
+    if (p)
+    {
+        F::destroy_plan(p);
+    }
+    F::free_fn(in);
+    F::free_fn(out);
+}
+
+/* NULL size array with positive rank -> builder rejects, NULL plan. */
+TYPED_TEST(FftwWrapperRobustnessTest, NTEST_MANY_DFT_NULL_N)
+{
+    using F = FftwTypes<TypeParam>;
+    auto *in = F::alloc_complex(8);
+    auto *out = F::alloc_complex(8);
+    auto p = F::plan_many_dft(
+        1, nullptr, 1, in, nullptr, 1, 8,
+        out, nullptr, 1, 8, FFTW_FORWARD, FFTW_ESTIMATE);
+    EXPECT_EQ(p, nullptr);
     if (p)
     {
         F::destroy_plan(p);
@@ -536,6 +536,46 @@ TYPED_TEST(FftwWrapperRobustnessTest, NTEST_GURU_DFT_NEGATIVE_HOWMANY_RANK)
     /* howmany_rank <= 0 is treated as "no batch" (vec_rank=1, unit vec) by
      * the translator, so this yields a VALID single-transform plan. */
     EXPECT_NE(p, nullptr);
+    if (p)
+    {
+        F::destroy_plan(p);
+    }
+    F::free_fn(in);
+    F::free_fn(out);
+}
+
+/* NULL dims array with positive rank -> guru builder rejects, NULL plan. */
+TYPED_TEST(FftwWrapperRobustnessTest, NTEST_GURU_DFT_NULL_DIMS)
+{
+    using F = FftwTypes<TypeParam>;
+    using iodim_t = typename F::iodim_t;
+    iodim_t howmany[1] = {{1, 1, 1}};
+    auto *in = F::alloc_complex(8);
+    auto *out = F::alloc_complex(8);
+    auto p = F::plan_guru_dft(
+        1, nullptr, 1, howmany, in, out,
+        FFTW_FORWARD, FFTW_ESTIMATE);
+    EXPECT_EQ(p, nullptr);
+    if (p)
+    {
+        F::destroy_plan(p);
+    }
+    F::free_fn(in);
+    F::free_fn(out);
+}
+
+/* NULL howmany_dims with positive howmany_rank -> NULL plan. */
+TYPED_TEST(FftwWrapperRobustnessTest, NTEST_GURU_DFT_NULL_HOWMANY_DIMS)
+{
+    using F = FftwTypes<TypeParam>;
+    using iodim_t = typename F::iodim_t;
+    iodim_t dims[1] = {{8, 1, 1}};
+    auto *in = F::alloc_complex(8);
+    auto *out = F::alloc_complex(8);
+    auto p = F::plan_guru_dft(
+        1, dims, 1, nullptr, in, out,
+        FFTW_FORWARD, FFTW_ESTIMATE);
+    EXPECT_EQ(p, nullptr);
     if (p)
     {
         F::destroy_plan(p);
@@ -663,13 +703,12 @@ TEST_F(FftwWrapperMemRobustnessTest, NTEST_ALLOC_COMPLEX_F_SIZE_MAX)
     }
 }
 
-/* These exact multiplication boundaries are disabled until fftw_alloc_*()
- * checks n > SIZE_MAX / sizeof(element) before multiplying. The first count
- * does not overflow; the second must be rejected without reaching malloc.
- * Under ASAN, omit the first allocation because the sanitizer aborts on that
- * valid-but-impossibly-large request. */
+/* Overflow boundary: counts above SIZE_MAX/sizeof(element) are rejected (NULL)
+ * instead of wrapping small and under-allocating. At-limit is valid but huge,
+ * so the OS refuses it. Under ASAN, skip the at-limit alloc (ASAN aborts on
+ * impossibly large requests). */
 TEST_F(FftwWrapperMemRobustnessTest,
-       DISABLED_PRODUCTION_BLOCKED_ALLOC_REAL_MULTIPLICATION_BOUNDARY)
+       NTEST_ALLOC_REAL_MULTIPLICATION_BOUNDARY)
 {
     constexpr size_t max_count = SIZE_MAX / sizeof(double);
 #ifndef FFTW_WRAPPER_BUILT_WITH_ASAN
@@ -689,7 +728,7 @@ TEST_F(FftwWrapperMemRobustnessTest,
 }
 
 TEST_F(FftwWrapperMemRobustnessTest,
-       DISABLED_PRODUCTION_BLOCKED_ALLOC_COMPLEX_MULTIPLICATION_BOUNDARY)
+       NTEST_ALLOC_COMPLEX_MULTIPLICATION_BOUNDARY)
 {
     constexpr size_t max_count = SIZE_MAX / sizeof(fftw_complex);
 #ifndef FFTW_WRAPPER_BUILT_WITH_ASAN
@@ -709,7 +748,7 @@ TEST_F(FftwWrapperMemRobustnessTest,
 }
 
 TEST_F(FftwWrapperMemRobustnessTest,
-       DISABLED_PRODUCTION_BLOCKED_ALLOC_REAL_F_MULTIPLICATION_BOUNDARY)
+       NTEST_ALLOC_REAL_F_MULTIPLICATION_BOUNDARY)
 {
     constexpr size_t max_count = SIZE_MAX / sizeof(float);
 #ifndef FFTW_WRAPPER_BUILT_WITH_ASAN
@@ -729,7 +768,7 @@ TEST_F(FftwWrapperMemRobustnessTest,
 }
 
 TEST_F(FftwWrapperMemRobustnessTest,
-       DISABLED_PRODUCTION_BLOCKED_ALLOC_COMPLEX_F_MULTIPLICATION_BOUNDARY)
+       NTEST_ALLOC_COMPLEX_F_MULTIPLICATION_BOUNDARY)
 {
     constexpr size_t max_count = SIZE_MAX / sizeof(fftwf_complex);
 #ifndef FFTW_WRAPPER_BUILT_WITH_ASAN
@@ -968,4 +1007,39 @@ TEST_F(FftwWrapperMemRobustnessTest, NTEST_FPRINT_PLAN_F_NULL_FILE)
     }
     fftwf_free(in);
     fftwf_free(out);
+}
+
+/* R2R stubs must return NULL (unsupported) without crashing. */
+TEST_F(FftwWrapperMemRobustnessTest, NTEST_R2R_STUBS_RETURN_NULL_D)
+{
+    double buf[16] = {0};
+    const int n = 8;
+    fftw_r2r_kind kind = FFTW_R2HC;
+
+    EXPECT_EQ(fftw_plan_r2r_1d(n, buf, buf, kind, FFTW_ESTIMATE), nullptr);
+    EXPECT_EQ(fftw_plan_r2r_2d(n, n, buf, buf, kind, kind, FFTW_ESTIMATE),
+              nullptr);
+    EXPECT_EQ(fftw_plan_r2r_3d(n, n, n, buf, buf, kind, kind, kind,
+                               FFTW_ESTIMATE), nullptr);
+    EXPECT_EQ(fftw_plan_r2r(1, &n, buf, buf, &kind, FFTW_ESTIMATE), nullptr);
+    EXPECT_EQ(fftw_plan_many_r2r(1, &n, 1, buf, nullptr, 1, n,
+                                 buf, nullptr, 1, n, &kind, FFTW_ESTIMATE),
+              nullptr);
+}
+
+TEST_F(FftwWrapperMemRobustnessTest, NTEST_R2R_STUBS_RETURN_NULL_F)
+{
+    float buf[16] = {0};
+    const int n = 8;
+    fftwf_r2r_kind kind = FFTW_R2HC;
+
+    EXPECT_EQ(fftwf_plan_r2r_1d(n, buf, buf, kind, FFTW_ESTIMATE), nullptr);
+    EXPECT_EQ(fftwf_plan_r2r_2d(n, n, buf, buf, kind, kind, FFTW_ESTIMATE),
+              nullptr);
+    EXPECT_EQ(fftwf_plan_r2r_3d(n, n, n, buf, buf, kind, kind, kind,
+                                FFTW_ESTIMATE), nullptr);
+    EXPECT_EQ(fftwf_plan_r2r(1, &n, buf, buf, &kind, FFTW_ESTIMATE), nullptr);
+    EXPECT_EQ(fftwf_plan_many_r2r(1, &n, 1, buf, nullptr, 1, n,
+                                  buf, nullptr, 1, n, &kind, FFTW_ESTIMATE),
+              nullptr);
 }
