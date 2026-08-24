@@ -71,10 +71,13 @@ typedef struct aoclfftz_selector
 {                                                                              \
     sel_obj->solution->decomp_scheme->vec_rank = problem->vec_rank;            \
     sel_obj->solution->decomp_scheme->dim_rank = dim_rank;                     \
-    FFTZ_INT32 cnt, idx = 0; \
+    FFTZ_INT32 cnt, idx = 0;                                                   \
     for (cnt = 0; cnt < problem->dim_rank; cnt++)                              \
     {                                                                          \
-        if (problem->dims[cnt].n != 1)                                         \
+        /* Copy a size-one dims[0] for real problems; the real solvers         \
+           handle that transform size themselves. */                           \
+        if (problem->dims[cnt].n != 1 ||                                       \
+            (problem->flags.fft_type && cnt == 0))                             \
         {                                                                      \
             sel_obj->solution->decomp_scheme->dims[idx].n =                    \
                 problem->dims[cnt].n;                                          \
@@ -196,8 +199,10 @@ typedef struct aoclfftz_selector
 
 // Shrink_dim_rank : returns the new dim rank by adding the number of dimensions
 // whose size is not equal to one.
-// Ex:- 2x1x3x1, returns 2
-#define SHRINK_DIM_RANK(dims, dim_rank, ret)                                   \
+// Ex:- 2x1x3x1:
+//  - returns 2 for complex problems
+//  - returns 3 for real problems (innermost size-one dims[0] is retained)
+#define SHRINK_DIM_RANK(dims, dim_rank, is_real, ret)                          \
 {                                                                              \
     if (dim_rank == 1)                                                         \
     {                                                                          \
@@ -205,10 +210,12 @@ typedef struct aoclfftz_selector
     }                                                                          \
     else                                                                       \
     {                                                                          \
-        FFTZ_INT32 dim_rank_counter = 0; \
-        for (FFTZ_INT32 i = 0; i < dim_rank; i++) \
+        FFTZ_INT32 dim_rank_counter = 0;                                       \
+        for (FFTZ_INT32 i = 0; i < dim_rank; i++)                              \
         {                                                                      \
-            if (dims[i].n != 1)                                                \
+            /* Count a size-one dims[0] for real problems; the real solvers    \
+               handle that transform size themselves. */                       \
+            if (dims[i].n != 1 || ((is_real) && i == 0))                       \
             {                                                                  \
                 dim_rank_counter++;                                            \
             }                                                                  \

@@ -752,7 +752,9 @@ FFTZ_INT32 selector_fixed_mode_rdft_(aoclfftz_selector_t *sel,
     }
     // SOLVER_BATCHED
     level1_cond1 =
-        ((sel->solution->decomp_scheme->dims[0].n != 1) && /* non-size-one */
+        // A 1D batched size-one problem needs no batched parent; its solver
+        // handles the batch. An ND outer batch still needs a batched parent.
+        ((sel->solution->decomp_scheme->dims[0].n != 1 || dim_rank > 1) &&
          ((pre_fuse_vec_rank > 1) ||                        /* ND Batched */
           /* 1D Batched 1D Non-direct cases*/
           ((sel->solution->decomp_scheme->vecs[0].n > 1) &&
@@ -1421,7 +1423,8 @@ FFTZ_VOID *setup_dft_f(aoclfftz_prob_desc_f *problem)
     // shrink dim_rank
     // used in n dim case where size one problems are removed
     FFTZ_INT32 dim_rank = 1;
-    SHRINK_DIM_RANK(problem->dims, problem->dim_rank, dim_rank);
+    SHRINK_DIM_RANK(problem->dims, problem->dim_rank, flags.fft_type,
+                    dim_rank);
 
     kernel_t kt_dft[MAX_NUM_KERNELS_IN_TABLE] = {0};
     kernel_t kt_twid_dft[MAX_NUM_KERNELS_IN_TABLE] = {0};
@@ -1496,7 +1499,8 @@ FFTZ_VOID *setup_dft_d(aoclfftz_prob_desc_d *problem)
     // shrink dim_rank
     // used in n dim case where size one problems are removed
     FFTZ_INT32 dim_rank = 1;
-    SHRINK_DIM_RANK(problem->dims, problem->dim_rank, dim_rank);
+    SHRINK_DIM_RANK(problem->dims, problem->dim_rank, flags.fft_type,
+                    dim_rank);
 
     kernel_t kt_dft[MAX_NUM_KERNELS_IN_TABLE] = {0};
     kernel_t kt_twid_dft[MAX_NUM_KERNELS_IN_TABLE] = {0};
@@ -1568,7 +1572,8 @@ FFTZ_VOID *setup_dft_f_64_(aoclfftz_prob_desc_f_64_ *problem)
     // shrink dim_rank
     // used in n dim case where size one problems are removed
     FFTZ_INT32 dim_rank = 1;
-    SHRINK_DIM_RANK(problem->dims, problem->dim_rank, dim_rank);
+    SHRINK_DIM_RANK(problem->dims, problem->dim_rank, flags.fft_type,
+                    dim_rank);
 
     kernel_t kt_dft[MAX_NUM_KERNELS_IN_TABLE] = {0};
     kernel_t kt_twid_dft[MAX_NUM_KERNELS_IN_TABLE] = {0};
@@ -1639,7 +1644,8 @@ FFTZ_VOID *setup_dft_d_64_(aoclfftz_prob_desc_d_64_ *problem)
     // shrink dim_rank
     // used in n dim case where size one problems are removed
     FFTZ_INT32 dim_rank = 1;
-    SHRINK_DIM_RANK(problem->dims, problem->dim_rank, dim_rank);
+    SHRINK_DIM_RANK(problem->dims, problem->dim_rank, flags.fft_type,
+                    dim_rank);
 
     kernel_t kt_dft[MAX_NUM_KERNELS_IN_TABLE] = {0};
     kernel_t kt_twid_dft[MAX_NUM_KERNELS_IN_TABLE] = {0};

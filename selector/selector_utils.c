@@ -23,31 +23,12 @@ FFTZ_INT32 copy_decomp_scheme( aoclfftz_decomp_scheme_t *to_ds,
 {
     to_ds->vec_rank = from_ds->vec_rank;
     to_ds->dim_rank = from_ds->dim_rank;
-    FFTZ_INT32 cnt, idx = 0;
+    FFTZ_INT32 cnt;
     for (cnt = 0; cnt < from_ds->dim_rank; cnt++)
     {
-        if (from_ds->dims[cnt].n != 1)
-        {
-            to_ds->dims[idx].n =
-                from_ds->dims[cnt].n;
-            to_ds->dims[idx].in_stride =
-                from_ds->dims[cnt].in_stride;
-            to_ds->dims[idx].out_stride =
-                from_ds->dims[cnt].out_stride;
-            idx++;
-        }
-    }
-    /* Gets Executed in scenario where the shrinked dim_rank is one
-       and the problem size is also one.
-       Example: 1x1x1 or 1 */
-    if (idx == 0)
-    {
-        to_ds->dims[0].n =
-            from_ds->dims[0].n;
-        to_ds->dims[0].in_stride =
-            from_ds->dims[0].in_stride;
-        to_ds->dims[0].out_stride =
-            from_ds->dims[0].out_stride;
+        to_ds->dims[cnt].n = from_ds->dims[cnt].n;
+        to_ds->dims[cnt].in_stride = from_ds->dims[cnt].in_stride;
+        to_ds->dims[cnt].out_stride = from_ds->dims[cnt].out_stride;
     }
     for (cnt = 0; cnt < from_ds->vec_rank; cnt++)
     {
