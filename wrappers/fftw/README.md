@@ -38,9 +38,10 @@ Building on Linux
    cmake --build <build directory> --target install -j
    ```
    The library is generated in "lib" directory. <br>
-   The additional option `--target install` will install the library, binary, and <br>
-   interface header files in the installation path as specified with <br>
-   `-DCMAKE_INSTALL_PREFIX` option or in the local system path. <br>
+   The additional option `--target install` will install the library, interface <br>
+   header files, and the CMake package configuration and pkg-config files in the <br>
+   installation path as specified with `-DCMAKE_INSTALL_PREFIX` option or in the <br>
+   local system path. <br>
    The option `-j` will run the compilation process using multiple cores.
 
 3. To uninstall the installed files, run the following custom command:

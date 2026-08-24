@@ -5,10 +5,11 @@
 #
 # @brief CMake based build system for the library and test binary.
 #
-# Compiles and installs the library and test bench binary with configured
-# options. Supports uninstall custom command to remove the installed files.
-# Enables CTest for adding and testing Gtest and test bench related tests.
-# Finds Doxygen installation and generates the documentation automatically.
+# Compiles the library and test bench with configured options, and installs
+# the library, public headers and package config files. Supports uninstall
+# custom command to remove the installed files. Enables CTest for adding
+# and testing Gtest and test bench related tests. Finds Doxygen installation
+# and generates the documentation automatically.
 #
 # @author S. Biplab Raut
 
@@ -152,7 +153,6 @@ set(ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 link_directories(${ROOT_DIR}/build/)
 set(DEST_LIB_PATH lib)
 set(DEST_INC_PATH include)
-set(DEST_BIN_PATH bin)
 
 set(INC_FILES api/aoclfftz.h api/types.h)
 
@@ -163,10 +163,8 @@ endif()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     message(STATUS "Build type selected is Release")
-    add_compile_definitions(CFLAGS_SET1="${CMAKE_C_FLAGS_RELEASE}")
 else()
     message(STATUS "Build type selected is Debug")
-    add_compile_definitions(CFLAGS_SET1="${CMAKE_C_FLAGS_DEBUG}")
 endif()
 
 if (ENABLE_FMA AND (ENABLE_INSTRUCTIONS_UPTO MATCHES "None|AVX128"))
@@ -239,9 +237,6 @@ elseif(UNIX)
 endif()
 
 include(CheckCXXCompilerFlag)
-add_compile_definitions(CCompiler="${CMAKE_C_COMPILER}")
-add_compile_definitions(CXXCompiler="${CMAKE_CXX_COMPILER}")
-add_compile_definitions(CFLAGS_SET2="${CMAKE_C_FLAGS}")
 
 if(ENABLE_MULTI_THREADING)
     add_compile_definitions(MULTI_THREADING)
@@ -262,10 +257,6 @@ if(ENABLE_MULTI_THREADING)
         message(STATUS "Custom path to look for OpenMP: ${OpenMP_libomp_LIBRARY}")
     endif()
     list(APPEND CORE_SRC_FILES ${MT_SRC_FILES})
-endif()
-
-if(ENABLE_MPI)
-    add_compile_definitions(ENABLE_MPI_FFTZ="1")
 endif()
 
 if(AOCL_ENABLE_LOG)
@@ -619,19 +610,15 @@ if(lib_deps)
     target_link_libraries(${exe_name} ${lib_deps})
 endif()
 
-# Set rpath so the executable finds the shared library in all scenarios:
-# - Build directory: ./build/aocl_fftz_bench finds ./build/libaocl_fftz.so
-# - Install directory: bin/aocl_fftz_bench finds ../lib/libaocl_fftz.so
+# Set the build-tree rpath so the test bench finds the shared library.
 if(UNIX AND NOT BUILD_STATIC_LIBS)
     set_target_properties(${exe_name} PROPERTIES
         BUILD_RPATH "$ORIGIN"
-        INSTALL_RPATH "$ORIGIN/../${DEST_LIB_PATH}"
     )
 endif()
 
 #Install into destination path by using -DCMAKE_INSTALL_PREFIX=<path> while configuring cmake
-message(STATUS "AOCL-FFTZ Library, Interface header files and Test binary will be installed at ${CMAKE_INSTALL_PREFIX}")
-install(TARGETS ${exe_name} DESTINATION ${DEST_BIN_PATH})
+message(STATUS "AOCL-FFTZ library, interface header files, CMake package config and pkg-config files will be installed at ${CMAKE_INSTALL_PREFIX}")
 install(TARGETS ${lib_name} EXPORT ${FFTZ_EXPORT_NAME}
     DESTINATION ${DEST_LIB_PATH}
     INCLUDES DESTINATION ${DEST_INC_PATH}
@@ -778,7 +765,7 @@ if((NOT BUILD_STATIC_LIBS) AND WIN32 AND (NOT AOCL_TEST_COVERAGE STREQUAL "OFF")
         )
 endif()
 
-# Uninstall the binary, library and header files using custom command.
+# Uninstall the library and header files using custom command.
 # Guarded: when built as part of the unified AOCL project, another component
 # may already define a global "uninstall" target.
 if(NOT TARGET uninstall)

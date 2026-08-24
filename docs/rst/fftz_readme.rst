@@ -35,9 +35,10 @@ To use clang compiler for the build, specify ``-DCMAKE_C_COMPILER=clang`` as an 
 
 - The library is generated in the "lib" directory
 - The test bench executable is generated in the "build" directory
-- The additional option ``--target install`` will install the library, binary, and
-  interface header files in the installation path as specified with
-  ``-DCMAKE_INSTALL_PREFIX`` option or in the local system path
+- The additional option ``--target install`` will install the library, interface
+  header files, and the CMake package configuration and pkg-config files in the
+  installation path as specified with ``-DCMAKE_INSTALL_PREFIX`` option or in
+  the local system path.
 
 
 Building on Windows
@@ -145,6 +146,7 @@ Running Test Bench On Linux & Windows
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The AOCL-FFTZ test bench supports multiple options in order to compute, validate, and benchmark FFT.
+The test bench is a development tool and is not installed; run it from the build directory.
 
 Following are a few sample commands to use and test with the test bench:
 

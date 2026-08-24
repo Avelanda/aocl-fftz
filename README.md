@@ -59,9 +59,9 @@ Building on Linux
    ```
    The library is generated in "lib" directory. <br>
    The test bench executable is generated in "build". <br>
-   The additional option `--target install` will install the library, binary, and <br>
-   interface header files in the installation path as specified with <br>
-   `-DCMAKE_INSTALL_PREFIX` option or in the local system path. <br>
+   The additional option `--target install` will install the library,<br>
+   interface header files, and the CMake package configuration and pkg-config files in the <br>
+   installation path as specified with `-DCMAKE_INSTALL_PREFIX` option or in the local system path. <br>
    The option `-j` will run the compilation process using multiple cores.
 
 4. To uninstall the installed files, run the following custom command:
@@ -162,25 +162,26 @@ Note: `aoclfftz_execute_io` is safe to call concurrently on a shared handle.
 Running Test Bench On Linux & Windows
 -------------------------------------
 The AOCL-FFTZ test bench supports multiple options in order to compute, validate & benchmark FFT.<br>
+The test bench is a development tool and is not installed; run it from the build directory.<br>
 Following are a few sample commands to use and test with the test bench:
 
 * The test bench can be run by using the following syntax: <br>
-  `aocl_fftz_bench [OPTIONS]... PROBLEM_SIZE`
+  `./aocl_fftz_bench [OPTIONS]... PROBLEM_SIZE`
 
 * Use the following command to set the precision for FFT: <br>
-  `aocl_fftz_bench -p/--precision <d/f>`
+  `./aocl_fftz_bench -p/--precision <d/f>`
 
 * Use the following command to set the data model for FFT: <br>
   `./aocl_fftz_bench -m/--data-model <l/i>`
 
 * Use the following command to run the test bench with the requested bench type: <br>
-  `aocl_fftz_bench -b/--bench-type <p/a>`
+  `./aocl_fftz_bench -b/--bench-type <p/a>`
 
 * Use the following command to run the test bench with the requested FFT type:<br>
-  `aocl_fftz_bench -f/--fft-type <c2c>`
+  `./aocl_fftz_bench -f/--fft-type <c2c>`
 
 * To check other options for test bench use the following command:<br>
-  `aocl_fftz_bench -h/--help`
+  `./aocl_fftz_bench -h/--help`
 
 Running tests with CTest
 ------------------------

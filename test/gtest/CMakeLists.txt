@@ -7,10 +7,6 @@
 #
 # Installs GTest library and link all the gtest based test cases to CTest.
 # Rebuild the AOCL-FFTZ library with wrapper files to make it work for gtests.
-# Compiles and installs the library and test bench binary with configured
-# options. Supports uninstall custom command to remove the installed files.
-# Enables CTest for adding and testing Gtest and test bench related tests.
-# Finds Doxygen installation and generates the documentation automatically.
 #
 # @author Srirammaswamy Srinivasan
 # @author Ashwin K. Godbole
