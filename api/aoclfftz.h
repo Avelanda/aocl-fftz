@@ -129,8 +129,8 @@ typedef struct aoclfftz_smp_pfft
     FFTZ_INT32 num_threads;
     /** Specifies the model for determining the number of threads.
      * - 0: Use `num_threads` as the maximum number of threads.
-     * - 1: Dynamically determine the number of threads (currently configured to
-     *      take upto the max system threads) */
+     * - 1: Dynamically determine the number of threads which can
+     *      be less than or equal to `num_threads`. */
     FFTZ_UINT32 dynamic_load_model;
 } aoclfftz_smp_pfft_t;
 
@@ -411,6 +411,8 @@ EXPORT_SYM_DYN FFTZ_VOID *aoclfftz_setup_d_64_(
  * The input and output buffers defined in the setup stage will be used for
  * computation without requiring additional buffer specification.
  * Setup API `aoclfftz_setup_*` must be invoked before calling this execute API.
+ * 
+ * @note This API is not thread-safe and must not be called concurrently on a shared handle.
  *
  * @param handle solution handle
  * @return
@@ -435,6 +437,8 @@ EXPORT_SYM_DYN aoclfftz_error_type aoclfftz_execute(FFTZ_VOID *handle);
  * Setup API `aoclfftz_setup_*` must have been invoked in the past to acquire
  * a valid solution handle before calling this execute API with any new set
  * of input and output buffers.
+ *
+ * @note Thread-safe API, and can be called concurrently on a shared handle.
  *
  * @param handle solution handle
  * @param in pointer to input buffer

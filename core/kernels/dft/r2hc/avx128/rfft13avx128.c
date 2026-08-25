@@ -823,7 +823,7 @@
      volatile FFTZ_INTP *in_strides = strides->in_strides;
      volatile FFTZ_INTP *out_strides = strides->out_strides;
  #else
-     INTP *in_strides = strides->in_strides;
+     FFTZ_INTP *in_strides = strides->in_strides;
      FFTZ_INTP *out_strides = strides->out_strides;
  #endif
      FFTZ_INTP v_in_stride = strides->v_in_stride;
@@ -1994,7 +1994,7 @@
      volatile FFTZ_INTP *in_strides = strides->in_strides;
      volatile FFTZ_INTP *out_strides = strides->out_strides;
  #else
-     INTP *in_strides = strides->in_strides;
+     FFTZ_INTP *in_strides = strides->in_strides;
      FFTZ_INTP *out_strides = strides->out_strides;
  #endif
      FFTZ_INTP v_in_stride = strides->v_in_stride;

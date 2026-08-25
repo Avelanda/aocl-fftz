@@ -114,7 +114,6 @@ Common Pitfalls
 ~~~~~~~~~~~~~~~
 
 - Using out-of-order storage or standalone transpose (not supported in this release).
-- Setting ``dim_rank > 1`` for real transforms for Multi thread execution.
 - Mismatched strides for in-place transforms.
 - Null pointers for required arrays or buffers.
 - Invalid thread or logger values (defaults will be applied).
