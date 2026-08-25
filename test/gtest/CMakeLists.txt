@@ -148,6 +148,16 @@ endif()
 
 file(GLOB GTEST_SRC_FILES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/${GTEST_DIR}/*/*.cpp)
 
+# gtest_discover_tests uses POST_BUILD discovery with a 5 s timeout by default.
+# Sanitizer builds (ASAN/UBSAN, or FUZZTEST via FUZZ_FLAGS) are slower to
+# enumerate and can hit that limit under CI load, so use PRE_TEST and 60 s.
+set(GTEST_DISCOVERY_MODE POST_BUILD)
+set(GTEST_DISCOVERY_TIMEOUT 5)
+if(ASAN OR UBSAN OR FUZZTEST)
+    set(GTEST_DISCOVERY_MODE PRE_TEST)
+    set(GTEST_DISCOVERY_TIMEOUT 60)
+endif()
+
 # FFTW wrapper tests require the test-local fftw3_gtest static library, which is
 # only defined when BUILD_THIRD_PARTY_WRAPPERS=ON. When it is OFF, note the skip
 # once here rather than emitting one message per fftw_wrapper_*_gtest file.
@@ -242,7 +252,9 @@ foreach(FILE ${GTEST_SRC_FILES})
             PRIVATE AOCLFFTZ_API_CONCURRENCY_TESTS)
     endif()
 
-    gtest_discover_tests(${TNAME})
+    gtest_discover_tests(${TNAME}
+        DISCOVERY_MODE ${GTEST_DISCOVERY_MODE}
+        DISCOVERY_TIMEOUT ${GTEST_DISCOVERY_TIMEOUT})
 endforeach()
 
 if(ENABLE_MULTI_THREADING)
@@ -484,5 +496,7 @@ if(FUZZTEST)
         endif()
     endif()
     target_link_libraries(fuzz_test PRIVATE fuzztest_fuzztest_gtest_main)
-    gtest_discover_tests(fuzz_test)
+    gtest_discover_tests(fuzz_test
+        DISCOVERY_MODE ${GTEST_DISCOVERY_MODE}
+        DISCOVERY_TIMEOUT ${GTEST_DISCOVERY_TIMEOUT})
 endif()
