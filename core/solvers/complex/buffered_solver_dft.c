@@ -30,12 +30,18 @@ static FFTZ_VOID setup_buffered_output_strides(aoclfftz_solution_t *sol,
     sol->decomp_scheme->out_real = sol->dft_bufs->ct_buf_real;
     sol->decomp_scheme->out_imag = sol->dft_bufs->ct_buf_imag;
 
-    // Calculate stride factor from batched vectors
+    // The batch is spaced by the problem's stride in the problem's buffer, but
+    // this buffer is scratch the radix-r stage reads back immediately, so pack
+    // the batch instead of reproducing gaps nothing is written into.
     FFTZ_INTP batched_stride_factor = 1;
     if (sol->decomp_scheme->batched_vecs)
     {
-        batched_stride_factor = sol->decomp_scheme->batched_vecs[0].n *
-                                sol->decomp_scheme->batched_vecs[0].out_stride;
+        batched_stride_factor = sol->decomp_scheme->batched_vecs[0].n;
+        sol->decomp_scheme->batched_vecs[0].out_stride = 1;
+        if (next_sol->decomp_scheme->batched_vecs)
+        {
+            next_sol->decomp_scheme->batched_vecs[0].out_stride = 1;
+        }
     }
     sol->decomp_scheme->dims[0].out_stride = batched_stride_factor;
     sol->decomp_scheme->vecs[0].out_stride =
@@ -79,9 +85,7 @@ FFTZ_INT32 setup_buffered_solver(aoclfftz_solution_t *sol,
     }
     if (sol->decomp_scheme->batched_vecs)
     {
-        // Multiply by both n and out_stride to account for strided access
-        buffer_length *= (sol->decomp_scheme->batched_vecs[0].n) *
-                         (sol->decomp_scheme->batched_vecs[0].out_stride);
+        buffer_length *= (sol->decomp_scheme->batched_vecs[0].n);
     }
 
     if (sol->dft_bufs->ct_buffer != NULL)

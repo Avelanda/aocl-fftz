@@ -15,30 +15,23 @@
 #include "api/aoclfftz_internal.h"
 
 /**
- * Compute the maximum buffer size needed for an N-dimensional real FFT
- * - For dimension 0:   (n0 / 2 + 1) * stride_0
- * - For other dims:    (ni - 1) * stride_i
- * Strides are chosen based on FFT direction (forward or backward).
+ * Compute the element count of the (N-1)D half-complex intermediate that
+ * a backward (C2R) REAL_NDIM plan's aux_buffer_1 must hold:
+ * (n0 / 2 + 1) * n1 * ... * n(dim_rank-1).
+ *
+ * aux_buffer_1 is private scratch between the (N-1)D complex stage and the
+ * 1D real stage (see setup_real_ndim_solver): both stages address it with a
+ * densely packed layout instead of the caller's own dims strides, so its
+ * required size depends only on element counts -- never on how the caller
+ * chose to stride their input/output arrays.
  */
-FFTZ_UINTP calculate_max_buffer_size(aoclfftz_solution_t *sol)
+FFTZ_UINTP calculate_c2r_aux_buffer_size(aoclfftz_solution_t *sol)
 {
-    FFTZ_UINTP max_size = 1;
-
-    // Compute max buffer size for ND real FFT using half-complex for first dim
-    // Uses output stride for forward, input stride for backward
-    FFTZ_UINT8 is_forward =
-        (FFT_DIR(sol->decomp_scheme->flags) == FORWARD_FFT_DIR);
-    FFTZ_INTP dim0_size = sol->decomp_scheme->dims[0].n / 2 + 1;
-    FFTZ_INTP dim0_stride = is_forward ? sol->decomp_scheme->dims[0].out_stride
-                                  : sol->decomp_scheme->dims[0].in_stride;
-    max_size += ((dim0_size - 1) * dim0_stride);
+    aoclfftz_dim_t_64_ *dims = sol->decomp_scheme->dims;
+    FFTZ_UINTP max_size = (FFTZ_UINTP)(dims[0].n / 2 + 1);
     for (FFTZ_INT32 i = 1; i < sol->decomp_scheme->dim_rank; i++)
     {
-        FFTZ_INTP dimi_size = sol->decomp_scheme->dims[i].n;
-        FFTZ_INTP dimi_stride =
-            is_forward ? sol->decomp_scheme->dims[i].out_stride
-                       : sol->decomp_scheme->dims[i].in_stride;
-        max_size += ((dimi_size - 1) * dimi_stride);
+        max_size *= (FFTZ_UINTP)dims[i].n;
     }
     return max_size;
 }
@@ -409,10 +402,13 @@ FFTZ_INT32 alloc_ndim_buffer(aoclfftz_solution_t *solution,
     // by removing the smallest dim for. e.g. problem size of 30x40x50 ->
     // ct_buffer of 40x50 for multi-threaded problems, this 2D buffer will be
     // created per thread.
+    //
+    // The buffered solver writes here without gaps, even for a strided
+    // problem. So size this buffer as if the problem were unit-strided.
     FFTZ_INTP min_dim_size = dims[0].n;
     for (FFTZ_INT32 i = 0; i < dim_rank; i++)
     {
-        buffer_length += ((dims[i].n - 1) * (dims[i].out_stride));
+        buffer_length *= dims[i].n;
         if (dims[i].n < min_dim_size)
         {
             min_dim_size = dims[i].n;

@@ -175,7 +175,7 @@ FFTZ_VOID release_owned_real_buffered_aux(aoclfftz_solution_t *sol);
 FFTZ_VOID destroy_solution(aoclfftz_solution_t *sol);
 FFTZ_VOID destroy_decomp_scheme(aoclfftz_decomp_scheme_t *decomp_scheme);
 FFTZ_VOID destroy_bluestein(aoclfftz_bluestein_t *bluestein);
-FFTZ_UINTP calculate_max_buffer_size(aoclfftz_solution_t *sol);
+FFTZ_UINTP calculate_c2r_aux_buffer_size(aoclfftz_solution_t *sol);
 FFTZ_VOID destroy_pow2_iterative(aoclfftz_pow2_iterative_t *pow2_iterative);
 FFTZ_VOID destroy_pow2_fourstep(aoclfftz_pow2_fourstep_t *pow2_fourstep);
 #endif // MEMORY_MANAGER_H

@@ -27,12 +27,6 @@ FFTZ_INT32 setup_real_ndim_solver(aoclfftz_solution_t *sol,
     dt_prec = DT_PRECISION_FLAG(sol->decomp_scheme->flags);
     dt_bytes = DT_PRECISION_BYTES(dt_prec);
 
-    // Logical bytes per REAL_NDIM aux slab; round up so thread slabs stay
-    // aligned.
-    FFTZ_INTP logical_aux_buf_size =
-        calculate_max_buffer_size(sol) * DATA_STRIDE * dt_bytes;
-    FFTZ_INTP padded_aux_buf_size = GET_PADDED_SIZE(logical_aux_buf_size);
-
     copy_solution_obj_wo_dims(complex_dims_sol, sol);
     copy_solution_obj_wo_dims(real_dim_sol, sol);
 
@@ -51,6 +45,12 @@ FFTZ_INT32 setup_real_ndim_solver(aoclfftz_solution_t *sol,
                 return AOCLFFTZ_MEMORY_FAILURE;
             }
         }
+        // Logical bytes per C2R aux slab; round up so thread slabs stay
+        // aligned.
+        FFTZ_INTP logical_aux_buf_size =
+            calculate_c2r_aux_buffer_size(sol) * DATA_STRIDE * dt_bytes;
+        FFTZ_INTP padded_aux_buf_size = GET_PADDED_SIZE(logical_aux_buf_size);
+
         FREE_ALIGN_ALLOCATED_MEM(sol->dft_bufs->buffered->aux_buffer_1);
         ALLOC_ALIGN_INIT(sol->dft_bufs->buffered->aux_buffer_1, FFTZ_VOID,
             sol->decomp_scheme->thread_info->active_threads *
@@ -109,20 +109,41 @@ FFTZ_INT32 setup_real_ndim_solver(aoclfftz_solution_t *sol,
     real_dim_sol->decomp_scheme->vec_rank = dim_rank - 1;
 
     // Setup (N-1)D complex_dims_sol dimensions
-    // R2C (forward): half-complex data is in output,
-    //   use out_stride for complex_dims_sol
-    // C2R (backward): half-complex data is in input,
-    //   use in_stride for complex_dims_sol
+    // R2C (forward): complex_dims_sol reads real_dim_sol's own output and
+    //   writes straight into the caller's output buffer (no aux buffer
+    //   involved), so both in_stride and out_stride must mirror the
+    //   caller's real out_stride.
+    // C2R (backward): complex_dims_sol reads the caller's real in_stride,
+    //   but its own output only ever lands in the private aux_buffer_1
+    //   (see above) that nothing outside this pair addresses. So its
+    //   out_stride is free to be densely packed instead of reproducing the
+    //   caller's (possibly padded/strided) layout; real_dim_sol's matching
+    //   in_stride/dims[0].in_stride below are set to that same packed
+    //   spacing so the two stages agree on where each element in
+    //   aux_buffer_1 lives. This keeps aux_buffer_1's size (see
+    //   calculate_c2r_aux_buffer_size) independent of the caller's strides.
     // FIXME : memcpy instead ?
+    FFTZ_INTP packed_stride = 1;
     for (FFTZ_INT32 i = 0; i < dim_rank - 1; i++)
     {
         complex_dims_sol->decomp_scheme->dims[i].n =
             sol->decomp_scheme->dims[i + 1].n;
-        FFTZ_INTP dim_stride = is_forward
-                            ? sol->decomp_scheme->dims[i + 1].out_stride
-                            : sol->decomp_scheme->dims[i + 1].in_stride;
-        complex_dims_sol->decomp_scheme->dims[i].in_stride = dim_stride;
-        complex_dims_sol->decomp_scheme->dims[i].out_stride = dim_stride;
+        if (is_forward)
+        {
+            complex_dims_sol->decomp_scheme->dims[i].in_stride =
+                sol->decomp_scheme->dims[i + 1].out_stride;
+            complex_dims_sol->decomp_scheme->dims[i].out_stride =
+                sol->decomp_scheme->dims[i + 1].out_stride;
+        }
+        else
+        {
+            complex_dims_sol->decomp_scheme->dims[i].in_stride =
+                sol->decomp_scheme->dims[i + 1].in_stride;
+            complex_dims_sol->decomp_scheme->dims[i].out_stride =
+                packed_stride;
+            real_dim_sol->decomp_scheme->vecs[i].in_stride = packed_stride;
+            packed_stride *= complex_dims_sol->decomp_scheme->dims[i].n;
+        }
     }
 
     // Setup batch vector for complex_dims_sol
@@ -131,14 +152,28 @@ FFTZ_INT32 setup_real_ndim_solver(aoclfftz_solution_t *sol,
     // - C2R (backward): input is half-complex with n/2 + 1 valid points
     complex_dims_sol->decomp_scheme->vecs[0].n =
         sol->decomp_scheme->dims[0].n / 2 + 1;
-    FFTZ_INTP vec_stride = is_forward ? sol->decomp_scheme->dims[0].out_stride
-                                 : sol->decomp_scheme->dims[0].in_stride;
-    complex_dims_sol->decomp_scheme->vecs[0].in_stride = vec_stride;
-    complex_dims_sol->decomp_scheme->vecs[0].out_stride = vec_stride;
+    if (is_forward)
+    {
+        FFTZ_INTP vec_stride = sol->decomp_scheme->dims[0].out_stride;
+        complex_dims_sol->decomp_scheme->vecs[0].in_stride = vec_stride;
+        complex_dims_sol->decomp_scheme->vecs[0].out_stride = vec_stride;
+    }
+    else
+    {
+        complex_dims_sol->decomp_scheme->vecs[0].in_stride =
+            sol->decomp_scheme->dims[0].in_stride;
+        // packed_stride is now the product of all (N-1)D dims: the spacing
+        // between successive half-spectrum bins in the packed aux buffer.
+        complex_dims_sol->decomp_scheme->vecs[0].out_stride = packed_stride;
+        real_dim_sol->decomp_scheme->dims[0].in_stride = packed_stride;
+    }
 
     // Setup 1D real_dim_sol
-    real_dim_sol->decomp_scheme->dims[0].in_stride =
-        sol->decomp_scheme->dims[0].in_stride;
+    if (is_forward)
+    {
+        real_dim_sol->decomp_scheme->dims[0].in_stride =
+            sol->decomp_scheme->dims[0].in_stride;
+    }
     real_dim_sol->decomp_scheme->dims[0].out_stride =
         sol->decomp_scheme->dims[0].out_stride;
 
@@ -147,8 +182,13 @@ FFTZ_INT32 setup_real_ndim_solver(aoclfftz_solution_t *sol,
     {
         real_dim_sol->decomp_scheme->vecs[i].n =
             sol->decomp_scheme->dims[i + 1].n;
-        real_dim_sol->decomp_scheme->vecs[i].in_stride =
-            sol->decomp_scheme->dims[i + 1].in_stride;
+        // C2R vec input strides were set above while packing the complex
+        // stage's output into aux_buffer_1.
+        if (is_forward)
+        {
+            real_dim_sol->decomp_scheme->vecs[i].in_stride =
+                sol->decomp_scheme->dims[i + 1].in_stride;
+        }
         real_dim_sol->decomp_scheme->vecs[i].out_stride =
             sol->decomp_scheme->dims[i + 1].out_stride;
     }
