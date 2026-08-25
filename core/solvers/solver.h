@@ -82,6 +82,91 @@ is_solver_real_direct_family(aoclfftz_solver_type solver_type)
             solver_type <= SOLVER_REAL_MT_DIRECT_CT_C2R);
 }
 
+// Takes FFTZ_INT32 rather than aoclfftz_solver_type (unlike
+// is_solver_real_direct_family) so it can be called with a plain int from the
+// C++ gtest sources without an explicit enum cast.
+static inline FFTZ_UINT8
+is_solver_real_batched_family(FFTZ_INT32 solver_type)
+{
+    return solver_type == SOLVER_REAL_BATCHED ||
+           solver_type == SOLVER_REAL_MT_BATCHED;
+}
+
+// Returns the next real FFT stage after 'stage', skipping a Batched node's
+// internal Bluestein worker so a caller can advance the chain without caring
+// whether the stage is a plain Direct or a Batched -> Bluestein pair:
+//   - Batched -> Bluestein: the worker is the Batched node's next_sol and the
+//     following stage is linked after it, so the next stage is
+//     next_sol->next_sol.
+//   - Direct: the usual flat chain, so the next stage is next_sol.
+static inline aoclfftz_solution_t *
+get_next_real_stage(aoclfftz_solution_t *stage)
+{
+    if (stage != NULL &&
+        is_solver_real_batched_family(stage->solver->solver_type))
+    {
+        // Skip the Bluestein worker on next_sol; radix_m is one hop further.
+        return (stage->next_sol != NULL) ? stage->next_sol->next_sol : NULL;
+    }
+    return (stage != NULL) ? stage->next_sol : NULL;
+}
+
+// Counterpart to get_next_real_stage(). A Batched node always has its Bluestein
+// worker attached as next_sol by the time this is called, so that link is
+// followed without a NULL check.
+static inline FFTZ_VOID
+set_next_real_stage(aoclfftz_solution_t *stage, aoclfftz_solution_t *next)
+{
+    if (stage == NULL)
+    {
+        return;
+    }
+    if (is_solver_real_batched_family(stage->solver->solver_type))
+    {
+        stage->next_sol->next_sol = next;
+    }
+    else
+    {
+        stage->next_sol = next;
+    }
+}
+
+// Stash the packed CT child's group count on the realhelper before the Batched
+// setup collapses its vecs[0].n to 1; the child's stride build reads it there.
+// Zero for non-packed stages. Shared by the ST and MT batched setups.
+static inline FFTZ_VOID
+set_packed_child_group_count(aoclfftz_solution_t *sol,
+                             aoclfftz_solution_t *next_sol,
+                             aoclfftz_realhelper_t *realhelper)
+{
+    realhelper->packed_group_count =
+        (IS_BLUESTEIN_CT_STAGE(next_sol->decomp_scheme->flags))
+            ? sol->decomp_scheme->vecs[0].n
+            : 0;
+}
+
+// Bind the Bluestein chirp-multiply kernels: pre_mul (input x chirp), mul
+// (spectrum product) and post_mul (normalize + chirp). pre_mul and post_mul
+// pick a strided variant when the caller's input or output is strided. Shared
+// by the ST and MT Bluestein setups.
+static inline FFTZ_VOID
+bind_bluestein_mul_kernels(aoclfftz_solution_t *sol, kernel_tables_t *kt)
+{
+    aoclfftz_bluestein_t *bluestein = sol->dft_bufs->bluestein;
+    FFTZ_UINT8 strided_in  = sol->decomp_scheme->dims[0].in_stride != 1;
+    FFTZ_UINT8 strided_out = sol->decomp_scheme->dims[0].out_stride != 1;
+
+    for (FFTZ_UINT32 dir = 0; dir < NUM_FFT_DIRS; dir++)
+    {
+        bluestein->mul[dir] = kt->bs.ele_mul[dir];
+        bluestein->pre_mul[dir] =
+            (strided_in) ? kt->bs.ele_mul_strided_in[dir] : kt->bs.ele_mul[dir];
+        bluestein->post_mul[dir] =
+            (strided_out) ? kt->bs.ele_mul_fused_norm_strided_out[dir]
+                          : kt->bs.ele_mul_fused_norm[dir];
+    }
+}
+
 FFTZ_INT32 register_solvers(FFTZ_VOID);
 FFTZ_INT32 set_solver_fp(aoclfftz_generic_solver_t *solver_obj);
 FFTZ_INT32 is_solver_registered(aoclfftz_solver_type solver_type);
@@ -100,7 +185,8 @@ FFTZ_INT32 setup_buffered_solver(aoclfftz_solution_t *sol,
                             aoclfftz_solution_t *next_sol);
 FFTZ_INT32 setup_batched_solver(aoclfftz_solution_t *sol);
 FFTZ_INT32 setup_bluestein_solver(aoclfftz_solution_t *sol,
-                                  aoclfftz_solution_t *next_sol, FFTZ_INTP m);
+                                  aoclfftz_solution_t *next_sol, FFTZ_INTP m,
+                                  kernel_tables_t *kt);
 FFTZ_INT32 compute_chirp_fft(aoclfftz_solution_t *sol,
                              aoclfftz_solution_t *next_sol,
                              aoclfftz_mutable_ctx_t *ctx);
@@ -129,7 +215,8 @@ FFTZ_INT32 setup_mt_batched_solver(aoclfftz_solution_t *sol,
                                    FFTZ_UINT8 *has_nested);
 FFTZ_INT32 setup_mt_bluestein_solver(aoclfftz_solution_t *sol,
                                      aoclfftz_solution_t *next_sol,
-                                     FFTZ_INTP m, FFTZ_UINT8 *has_nested);
+                                     FFTZ_INTP m, kernel_tables_t *kt,
+                                     FFTZ_UINT8 *has_nested);
 #endif
 
 // RealFFT-Solvers
@@ -142,7 +229,10 @@ FFTZ_INT32 setup_real_direct_solver(aoclfftz_solution_t *sol,
 FFTZ_INT32 setup_real_batched_solver(aoclfftz_solution_t *sol,
                                 aoclfftz_solution_t *next_sol,
                                 aoclfftz_realhelper_t *realhelper);
-FFTZ_INT32 setup_real_bluestein_solver(aoclfftz_solution_t *sol, FFTZ_INTP n);
+FFTZ_INT32 setup_real_bluestein_solver(aoclfftz_solution_t *sol,
+                                       aoclfftz_solution_t *complex_sol,
+                                       kernel_tables_t *kt,
+                                       aoclfftz_realhelper_t *realhelper);
 FFTZ_INT32 setup_real_buffered_solver(aoclfftz_solution_t *sol,
                                  aoclfftz_realhelper_t *realhelper);
 FFTZ_INT32 setup_real_ct_solver(aoclfftz_solution_t *sol,

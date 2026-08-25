@@ -735,11 +735,14 @@ FFTZ_VOID swap_real_ct_solutions(aoclfftz_selector_t *sel)
         /* swap first CT node */
         if (sel->solution->solver->solver_type == SOLVER_REAL_CT &&
             (is_solver_real_direct_family(
+                 sel->solution->next_sol->solver->solver_type) ||
+             is_solver_real_batched_family(
                  sel->solution->next_sol->solver->solver_type)))
         {
-            sel->solution = curr->next_sol;
-            curr->next_sol = sel->solution->next_sol;
-            sel->solution->next_sol = curr;
+            aoclfftz_solution_t *stage = curr->next_sol;
+            sel->solution = stage;
+            curr->next_sol = get_next_real_stage(stage);
+            set_next_real_stage(stage, curr);
         }
         /* swap remaining CT nodes */
         prev = curr;
@@ -748,11 +751,12 @@ FFTZ_VOID swap_real_ct_solutions(aoclfftz_selector_t *sel)
         {
             next = curr->next_sol;
             if (curr->solver->solver_type == SOLVER_REAL_CT &&
-                is_solver_real_direct_family(next->solver->solver_type))
+                (is_solver_real_direct_family(next->solver->solver_type) ||
+                 is_solver_real_batched_family(next->solver->solver_type)))
             {
                 prev->next_sol = next;
-                curr->next_sol = next->next_sol;
-                next->next_sol = curr;
+                curr->next_sol = get_next_real_stage(next);
+                set_next_real_stage(next, curr);
             }
             prev = curr;
             curr = curr->next_sol;

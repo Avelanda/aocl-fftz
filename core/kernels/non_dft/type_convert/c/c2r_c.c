@@ -9,7 +9,7 @@
  *  imaginary parts, as a backward real transform yields real output. The real
  *  Bluestein solver applies this to its result after the backward (C2R)
  *  transform. src holds n contiguous complex values; dst holds n reals at
- *  element stride `stride`. Supports single and double precision.
+ *  element stride `elem_stride`. Supports single and double precision.
  *
  *  @author Jeevanantham N
  */
@@ -18,7 +18,8 @@
 
 static FFTZ_VOID
 c2r_strided_out_fp32_c(FFTZ_VOID *dst, FFTZ_VOID *src, FFTZ_INTP n,
-                       FFTZ_INTP stride)
+                       FFTZ_INTP elem_stride, aoclfftz_strides_t *strides,
+                       FFTZ_INTP group)
 {
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Enter");
     FFTZ_FLOAT *p_dst = (FFTZ_FLOAT *)dst;
@@ -27,14 +28,15 @@ c2r_strided_out_fp32_c(FFTZ_VOID *dst, FFTZ_VOID *src, FFTZ_INTP n,
 
     for (count = 0; count < n; count++)
     {
-        p_dst[count * stride] = p_src[count * DATA_STRIDE];
+        p_dst[count * elem_stride] = p_src[count * DATA_STRIDE];
     }
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Exit");
 }
 
 static FFTZ_VOID
 c2r_strided_out_fp64_c(FFTZ_VOID *dst, FFTZ_VOID *src, FFTZ_INTP n,
-                       FFTZ_INTP stride)
+                       FFTZ_INTP elem_stride, aoclfftz_strides_t *strides,
+                       FFTZ_INTP group)
 {
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Enter");
     FFTZ_DOUBLE *p_dst = (FFTZ_DOUBLE *)dst;
@@ -43,7 +45,7 @@ c2r_strided_out_fp64_c(FFTZ_VOID *dst, FFTZ_VOID *src, FFTZ_INTP n,
 
     for (count = 0; count < n; count++)
     {
-        p_dst[count * stride] = p_src[count * DATA_STRIDE];
+        p_dst[count * elem_stride] = p_src[count * DATA_STRIDE];
     }
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Exit");
 }

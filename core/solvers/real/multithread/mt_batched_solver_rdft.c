@@ -27,8 +27,10 @@ FFTZ_INT32 setup_real_mt_batched_solver(aoclfftz_solution_t *sol,
         *has_nested = 1;
     }
 
+    set_packed_child_group_count(sol, next_sol, realhelper);
+
     // Turn the vector problem into a single set/unit problem to find its
-    // solution if it is not a direct problem
+    // solution if it is not a direct problem.
     next_sol->decomp_scheme->vec_rank = 1;
     next_sol->decomp_scheme->vecs[0].n = 1;
 
@@ -75,10 +77,9 @@ FFTZ_INT32 setup_real_mt_batched_solver(aoclfftz_solution_t *sol,
 //   - slot_idx  : dense per-thread slot for every slot_idx-sliced pool below
 //                 this level: the REAL_BUFFERED / REAL_NDIM aux pools, the
 //                 real Direct CT stride pool and the Bluestein scratch.
-FFTZ_INT32 execute_real_mt_batched_solver_internal(aoclfftz_solution_t *sol,
-                                              aoclfftz_solution_t *next_sol,
-                                              FFTZ_INTP vec_rank,
-                                              aoclfftz_mutable_ctx_t *ctx)
+static FFTZ_INT32 execute_real_mt_batched_solver_internal(
+    aoclfftz_solution_t *sol, aoclfftz_solution_t *next_sol,
+    FFTZ_INTP vec_rank, aoclfftz_mutable_ctx_t *ctx)
 {
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Enter");
 
@@ -107,12 +108,13 @@ FFTZ_INT32 execute_real_mt_batched_solver_internal(aoclfftz_solution_t *sol,
             FFTZ_INT32 local_status = SOLVER_SUCCESS;
 
             aoclfftz_mutable_ctx_t thr_ctx = *ctx;
+            thr_ctx.batch_idx = b;
             thr_ctx.in_real  = MOVE_ADDR(ctx->in_real,  b * v_in_stride);
             thr_ctx.in_imag  = MOVE_ADDR(ctx->in_imag,  b * v_in_stride);
             thr_ctx.out_real = MOVE_ADDR(ctx->out_real, b * v_out_stride);
             thr_ctx.out_imag = MOVE_ADDR(ctx->out_imag, b * v_out_stride);
 
-            // Relevant only when the child is an ndim complex sub-solver (nd_sol),
+            // Relevant only when the child is an ndim complex sub-solver;
             // give each thread its own ct pool slice.
             thr_ctx.ct_offset = ctx->ct_offset +
                 (FFTZ_INTP)tid * (FFTZ_INTP)next_sol->dft_bufs->ct_buf_size;
@@ -171,6 +173,22 @@ static FFTZ_INT32 execute_real_mt_batched_solver(aoclfftz_solution_t *sol,
     status = execute_real_mt_batched_solver_internal(sol, next_sol,
                                                   sol->decomp_scheme->vec_rank,
                                                   ctx);
+
+    // A Batched -> Bluestein pair is one real CT stage. The loop above ran the
+    // Bluestein sub-solver across all batches; every batch must finish before
+    // the aux pools are swapped and the next stage starts.
+    if (status == SOLVER_SUCCESS &&
+        IS_BLUESTEIN_CT_STAGE(sol->decomp_scheme->flags))
+    {
+        SWAP_BUFFERS(ctx->aux_pool_base_1, ctx->aux_pool_base_2);
+#if REAL_FFT_EXECUTION_ORDER != REAL_FFT_ORDER_TRUE_RECURSION
+        aoclfftz_solution_t *next_stage = get_next_real_stage(sol);
+        if (next_stage != NULL)
+        {
+            status = next_stage->solver->execute_solver(next_stage, ctx);
+        }
+#endif
+    }
 
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Exit");
     return status;

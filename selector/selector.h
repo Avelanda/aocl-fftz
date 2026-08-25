@@ -180,17 +180,6 @@ typedef struct aoclfftz_selector
 #define IS_DIRECT_ONLY_PROBLEM(sol)                                            \
     (sol->twiddle->TW == NULL && sol->next_sol == NULL)
 
-/**
- * @brief Swap the buffers of two pointers
- *
- */
-#define SWAP_BUFFERS(buf1, buf2)                                               \
-{                                                                              \
-    FFTZ_VOID *temp_buffer_for_swap = buf1;                                    \
-    buf1 = buf2;                                                               \
-    buf2 = temp_buffer_for_swap;                                               \
-}
-
 #define RESET_COST(sol)                                                        \
 {                                                                              \
     sol->cost_analysis->ops = 0;                                               \
@@ -301,6 +290,7 @@ FFTZ_INT32 selector_bluestein_rdft(aoclfftz_selector_t *sel, kernel_t *kertab,
 FFTZ_VOID destroy_handle(FFTZ_VOID *handle);
 FFTZ_VOID fuse_vecs(aoclfftz_solution_t *sol, FFTZ_INT32 is_FFT_ker_supported);
 FFTZ_INT32 check_bluestein_problem(aoclfftz_decomp_scheme_t *decomp_scheme);
+FFTZ_INTP check_CT_solvability(FFTZ_INTP n, kernel_t *kertab);
 FFTZ_INT32 check_FFT_kernel_support(FFTZ_INTP n, kernel_t *kernels_table,
                                FFTZ_INT32 is_innermost_dim);
 FFTZ_DOUBLE get_kernel_weightage(FFTZ_INTP radix, kernel_t *kertab,

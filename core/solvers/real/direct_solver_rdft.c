@@ -64,6 +64,10 @@ FFTZ_INT32 setup_real_direct_solver(aoclfftz_solution_t *sol,
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Enter");
     FFTZ_INT32 status = SOLVER_SUCCESS;
 
+    // A Direct stage strides by its own vecs[0].n, so clear any group count a
+    // preceding packed Bluestein stage stashed here.
+    realhelper->packed_group_count = 0;
+
     status = allocate_and_setup_stride(sol, *realhelper);
     if (status != SOLVER_SUCCESS)
     {
@@ -119,9 +123,10 @@ static inline FFTZ_VOID execute_r2hcf_kernels(aoclfftz_solution_t *sol,
                  FFT_DIR(sol->decomp_scheme->flags));
 }
 
-// Runs one CT stage's kernels, then swaps the aux ping-pong pools in ctx.
-// ITERATIVE and PARTIAL_RECURSION hand that ctx straight to next_sol; under
-// TRUE_RECURSION ctx is by reference, so radix_r's swap is seen by radix_m.
+// Runs one CT stage's kernels, then swaps the aux ping-pong pools in ctx when
+// the stage wrote to aux. ITERATIVE and PARTIAL_RECURSION hand that ctx
+// straight to next_sol; under TRUE_RECURSION ctx is by reference, so radix_r's
+// swap is seen by radix_m.
 static inline
 FFTZ_VOID execute_ct_intra_stage_kernels(aoclfftz_solution_t *sol,
                                          aoclfftz_mutable_ctx_t *ctx,
@@ -132,8 +137,13 @@ FFTZ_VOID execute_ct_intra_stage_kernels(aoclfftz_solution_t *sol,
     execute_r2hcf_kernels(sol, in, out);
     execute_c2c_kernels_rdft(sol, ctx, in, out);
 
-    // Alternate the pools so the next stage reads what this one wrote.
-    SWAP_BUFFERS(ctx->aux_pool_base_1, ctx->aux_pool_base_2);
+    // Alternate the pools so the next stage reads what this one wrote. Only a
+    // stage that wrote to an aux pool needs the flip; the terminal stage writes
+    // the handle's output buffer, so swapping there would be a redundant no-op.
+    if (sol->decomp_scheme->real_out_role == REAL_USE_AUX_AND_SWAP)
+    {
+        SWAP_BUFFERS(ctx->aux_pool_base_1, ctx->aux_pool_base_2);
+    }
 }
 
 // Direct-only forward R2C for non-batched problems (vecs[0].n == 1).
@@ -199,23 +209,14 @@ static FFTZ_INT32 execute_real_direct_ct_r2c(aoclfftz_solution_t *sol,
 
     execute_ct_intra_stage_kernels(sol, ctx, in, out);
 
-#if REAL_FFT_EXECUTION_ORDER == REAL_FFT_ORDER_TRUE_RECURSION
-    // Recurse-then-combine mode: the CT solver owns tree traversal, so the
-    // Direct node behaves as a pure leaf (like the Complex Direct solver) and
-    // never chains to next_sol. Only the terminal leaf emits DC/Nyquist zeroing.
-    if (!HAS_NEXT(sol) &&
-        FFT_DIR(sol->decomp_scheme->flags) == FORWARD_FFT_DIR)
+    if (!HAS_NEXT(sol))
     {
         set_zero_for_dc_and_nyquist_ct(sol, out);
     }
-#else
-    if (HAS_NEXT(sol))
-    {
-        ret = sol->next_sol->solver->execute_solver(sol->next_sol, ctx);
-    }
+#if REAL_FFT_EXECUTION_ORDER != REAL_FFT_ORDER_TRUE_RECURSION
     else
     {
-        set_zero_for_dc_and_nyquist_ct(sol, out);
+        ret = sol->next_sol->solver->execute_solver(sol->next_sol, ctx);
     }
 #endif
 

@@ -203,7 +203,7 @@ static FFTZ_INT32 execute_real_ndim_solver(aoclfftz_solution_t *sol,
 {
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Enter");
 
-    aoclfftz_solution_t *complex_dims_sol = sol->dft_bufs->nd_sol;
+    aoclfftz_solution_t *complex_dims_sol = sol->dft_bufs->complex_sol;
     aoclfftz_solution_t *real_dim_sol = sol->next_sol;
 
     FFTZ_INT32 dt_prec, dt_bytes;

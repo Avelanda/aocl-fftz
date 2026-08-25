@@ -12,7 +12,7 @@
  *  half-complex output as the direct and CT real paths.
  *  The real Bluestein solver applies this to its result after the forward (R2C)
  *  transform. src holds n contiguous complex values; dst holds the retained
- *  n/2+1 values at element stride `stride`. Supports single and double
+ *  n/2+1 values at element stride `elem_stride`. Supports single and double
  *  precision.
  *
  *  @author Jeevanantham N
@@ -22,7 +22,8 @@
 
 static FFTZ_VOID
 c2hc_strided_out_fp32_c(FFTZ_VOID *dst, FFTZ_VOID *src, FFTZ_INTP n,
-                        FFTZ_INTP stride)
+                        FFTZ_INTP elem_stride, aoclfftz_strides_t *strides,
+                        FFTZ_INTP group)
 {
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Enter");
     FFTZ_FLOAT *p_dst = (FFTZ_FLOAT *)dst;
@@ -32,7 +33,7 @@ c2hc_strided_out_fp32_c(FFTZ_VOID *dst, FFTZ_VOID *src, FFTZ_INTP n,
 
     for (count = 0; count < n_hc; count++)
     {
-        FFTZ_INTP dst_idx = count * stride * DATA_STRIDE;
+        FFTZ_INTP dst_idx = count * elem_stride * DATA_STRIDE;
         FFTZ_INTP src_idx = count * DATA_STRIDE;
         p_dst[dst_idx] = p_src[src_idx];
         p_dst[dst_idx + 1] = p_src[src_idx + 1];
@@ -43,7 +44,7 @@ c2hc_strided_out_fp32_c(FFTZ_VOID *dst, FFTZ_VOID *src, FFTZ_INTP n,
     // setup_rdft_dc_nyquist_offsets_ds computes it. Bluestein reaches the
     // spectrum through complex chirp multiplies, so it leaves rounding noise
     // in those imaginary slots where the direct and CT paths emit exact zeros.
-    FFTZ_INTP nyquist_im = ((n & 1) == 0) ? n * stride + 1 : 1;
+    FFTZ_INTP nyquist_im = ((n & 1) == 0) ? n * elem_stride + 1 : 1;
     p_dst[1] = 0.0f;
     p_dst[nyquist_im] = 0.0f;
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Exit");
@@ -51,7 +52,8 @@ c2hc_strided_out_fp32_c(FFTZ_VOID *dst, FFTZ_VOID *src, FFTZ_INTP n,
 
 static FFTZ_VOID
 c2hc_strided_out_fp64_c(FFTZ_VOID *dst, FFTZ_VOID *src, FFTZ_INTP n,
-                        FFTZ_INTP stride)
+                        FFTZ_INTP elem_stride, aoclfftz_strides_t *strides,
+                        FFTZ_INTP group)
 {
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Enter");
     FFTZ_DOUBLE *p_dst = (FFTZ_DOUBLE *)dst;
@@ -61,7 +63,7 @@ c2hc_strided_out_fp64_c(FFTZ_VOID *dst, FFTZ_VOID *src, FFTZ_INTP n,
 
     for (count = 0; count < n_hc; count++)
     {
-        FFTZ_INTP dst_idx = count * stride * DATA_STRIDE;
+        FFTZ_INTP dst_idx = count * elem_stride * DATA_STRIDE;
         FFTZ_INTP src_idx = count * DATA_STRIDE;
         p_dst[dst_idx] = p_src[src_idx];
         p_dst[dst_idx + 1] = p_src[src_idx + 1];
@@ -72,7 +74,7 @@ c2hc_strided_out_fp64_c(FFTZ_VOID *dst, FFTZ_VOID *src, FFTZ_INTP n,
     // setup_rdft_dc_nyquist_offsets_ds computes it. Bluestein reaches the
     // spectrum through complex chirp multiplies, so it leaves rounding noise
     // in those imaginary slots where the direct and CT paths emit exact zeros.
-    FFTZ_INTP nyquist_im = ((n & 1) == 0) ? n * stride + 1 : 1;
+    FFTZ_INTP nyquist_im = ((n & 1) == 0) ? n * elem_stride + 1 : 1;
     p_dst[1] = 0.0;
     p_dst[nyquist_im] = 0.0;
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Exit");

@@ -3,10 +3,8 @@ AOCL-FFTZ
 
 AOCL-FFTZ is a high performance Fast Fourier Transform (FFT) library developed
 by AMD supporting advanced optimizations for AMD’s "Zen"-based CPUs.
-The library computes FFTs of (i) complex data of any size and dimension in
-both forward and backward directions, and (ii) real data of any
-size and dimension, excluding sizes that mix a prime factor larger than 13
-with smaller ones, in both forward and backward directions with support for
+The library computes FFTs of both (i) complex and (ii) real data of any size
+and dimension, in both forward and backward directions, with support for
 in-place and out-of-place result placements.
 
 The kernels in this library are vectorized to speed-up the single-threaded core

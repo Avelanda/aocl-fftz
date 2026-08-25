@@ -11,7 +11,7 @@
  *  even n) are ignored rather than copied, so a caller that leaves a value
  *  there gets the same result as from the direct and CT real paths.
  *  The real Bluestein solver applies this to its input before the backward
- *  (C2R) transform. src holds n/2+1 points at element stride `stride`; dst
+ *  (C2R) transform. src holds n/2+1 points at element stride `elem_stride`; dst
  *  holds n contiguous complex values. Supports single and double precision.
  *
  *  @author Jeevanantham N
@@ -21,7 +21,8 @@
 
 static FFTZ_VOID
 hc2c_strided_in_fp32_c(FFTZ_VOID *dst, FFTZ_VOID *src, FFTZ_INTP n,
-                       FFTZ_INTP stride)
+                       FFTZ_INTP elem_stride, aoclfftz_strides_t *strides,
+                       FFTZ_INTP group)
 {
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Enter");
     FFTZ_FLOAT *p_dst = (FFTZ_FLOAT *)dst;
@@ -32,7 +33,7 @@ hc2c_strided_in_fp32_c(FFTZ_VOID *dst, FFTZ_VOID *src, FFTZ_INTP n,
     for (count = 0; count < n_hc; count++)
     {
         FFTZ_INTP dst_idx = count * DATA_STRIDE;
-        FFTZ_INTP src_idx = count * stride * DATA_STRIDE;
+        FFTZ_INTP src_idx = count * elem_stride * DATA_STRIDE;
         p_dst[dst_idx] = p_src[src_idx];
         p_dst[dst_idx + 1] = p_src[src_idx + 1];
     }
@@ -57,7 +58,8 @@ hc2c_strided_in_fp32_c(FFTZ_VOID *dst, FFTZ_VOID *src, FFTZ_INTP n,
 
 static FFTZ_VOID
 hc2c_strided_in_fp64_c(FFTZ_VOID *dst, FFTZ_VOID *src, FFTZ_INTP n,
-                       FFTZ_INTP stride)
+                       FFTZ_INTP elem_stride, aoclfftz_strides_t *strides,
+                       FFTZ_INTP group)
 {
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Enter");
     FFTZ_DOUBLE *p_dst = (FFTZ_DOUBLE *)dst;
@@ -68,7 +70,7 @@ hc2c_strided_in_fp64_c(FFTZ_VOID *dst, FFTZ_VOID *src, FFTZ_INTP n,
     for (count = 0; count < n_hc; count++)
     {
         FFTZ_INTP dst_idx = count * DATA_STRIDE;
-        FFTZ_INTP src_idx = count * stride * DATA_STRIDE;
+        FFTZ_INTP src_idx = count * elem_stride * DATA_STRIDE;
         p_dst[dst_idx] = p_src[src_idx];
         p_dst[dst_idx + 1] = p_src[src_idx + 1];
     }

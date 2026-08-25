@@ -8,8 +8,8 @@
  *  Converts n real values into n interleaved complex values, setting each
  *  imaginary part to zero. The real Bluestein solver applies this to its input
  *  before the forward (R2C) transform. src holds n reals at element stride
- *  `stride`; dst holds n contiguous complex values. Supports single and double
- *  precision.
+ *  `elem_stride`; dst holds n contiguous complex values. Supports single and
+ *  double precision.
  *
  *  @author Jeevanantham N
  */
@@ -18,7 +18,8 @@
 
 static FFTZ_VOID
 r2c_strided_in_fp32_c(FFTZ_VOID *dst, FFTZ_VOID *src, FFTZ_INTP n,
-                      FFTZ_INTP stride)
+                      FFTZ_INTP elem_stride, aoclfftz_strides_t *strides,
+                      FFTZ_INTP group)
 {
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Enter");
     FFTZ_FLOAT *p_dst = (FFTZ_FLOAT *)dst;
@@ -28,7 +29,7 @@ r2c_strided_in_fp32_c(FFTZ_VOID *dst, FFTZ_VOID *src, FFTZ_INTP n,
     for (count = 0; count < n; count++)
     {
         FFTZ_INTP dst_idx = count * DATA_STRIDE;
-        FFTZ_INTP src_idx = count * stride;
+        FFTZ_INTP src_idx = count * elem_stride;
         p_dst[dst_idx] = p_src[src_idx];
         p_dst[dst_idx + 1] = 0.0f;
     }
@@ -37,7 +38,8 @@ r2c_strided_in_fp32_c(FFTZ_VOID *dst, FFTZ_VOID *src, FFTZ_INTP n,
 
 static FFTZ_VOID
 r2c_strided_in_fp64_c(FFTZ_VOID *dst, FFTZ_VOID *src, FFTZ_INTP n,
-                      FFTZ_INTP stride)
+                      FFTZ_INTP elem_stride, aoclfftz_strides_t *strides,
+                      FFTZ_INTP group)
 {
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Enter");
     FFTZ_DOUBLE *p_dst = (FFTZ_DOUBLE *)dst;
@@ -47,7 +49,7 @@ r2c_strided_in_fp64_c(FFTZ_VOID *dst, FFTZ_VOID *src, FFTZ_INTP n,
     for (count = 0; count < n; count++)
     {
         FFTZ_INTP dst_idx = count * DATA_STRIDE;
-        FFTZ_INTP src_idx = count * stride;
+        FFTZ_INTP src_idx = count * elem_stride;
         p_dst[dst_idx] = p_src[src_idx];
         p_dst[dst_idx + 1] = 0.0;
     }

@@ -912,6 +912,12 @@ TYPED_TEST_P(AoclfftzConcurrentRealTest, REAL_CT_MULTILEVEL)
     concurrent_exec_io::sweep(this, {625}, 1, true);
 }
 
+// CT with a packed Batched -> Bluestein real stage.
+TYPED_TEST_P(AoclfftzConcurrentRealTest, REAL_CT_BLUESTEIN)
+{
+    concurrent_exec_io::sweep(this, {34}, 1, true);
+}
+
 // Batched multi-level CT chain: checks ping-pong buffers are partitioned within a
 // single execute_io call and also are not shared between concurrent execute_io calls.
 TYPED_TEST_P(AoclfftzConcurrentRealTest, REAL_BATCHED_CT_MULTILEVEL)
@@ -963,6 +969,7 @@ REGISTER_TYPED_TEST_SUITE_P(
     REAL_CT_ONE_LEVEL,
     REAL_BATCHED_CT_ONE_LEVEL,
     REAL_CT_MULTILEVEL,
+    REAL_CT_BLUESTEIN,
     REAL_BATCHED_CT_MULTILEVEL,
     REAL_NDIM,
     REAL_BATCHED_NDIM,

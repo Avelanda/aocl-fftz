@@ -396,6 +396,20 @@ type_convert_ register_c2r_type_convert_kernel(FFTZ_INT32 cpu_flags,
     return register_c2r_type_convert_c(dt);
 }
 
+type_convert_ register_c2hc_packed_type_convert_kernel(FFTZ_INT32 cpu_flags,
+                                                       FFTZ_INT32 dt)
+{
+    /* TODO: add AVX512/AVX256/AVX128 variants here. */
+    return register_c2hc_packed_type_convert_c(dt);
+}
+
+type_convert_ register_hc2c_packed_type_convert_kernel(FFTZ_INT32 cpu_flags,
+                                                       FFTZ_INT32 dt)
+{
+    /* TODO: add AVX512/AVX256/AVX128 variants here. */
+    return register_hc2c_packed_type_convert_c(dt);
+}
+
 #undef ACCESS_AVX128
 #undef ACCESS_AVX256
 #undef ACCESS_AVX512

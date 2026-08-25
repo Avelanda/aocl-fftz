@@ -137,6 +137,7 @@ aoclfftz_solution_t *alloc_solution(FFTZ_INT32 vec_rank, FFTZ_INT32 dim_rank)
         sol->next_sol = NULL;
         sol->decomp_scheme->batched_vecs = NULL;
         sol->dft_bufs->nd_sol = NULL;
+        sol->dft_bufs->complex_sol = NULL;
         sol->dft_bufs->pow2_iterative = NULL;
         sol->dft_bufs->pow2_fourstep = NULL;
         sol->strides_grp->strides->in_strides = NULL;
@@ -293,32 +294,7 @@ aoclfftz_selector_t *alloc_selector(FFTZ_INT32 vec_rank, FFTZ_INT32 dim_rank,
             selector->kernel_tables->kt_dft = kernel_tables->kt_dft;
             selector->kernel_tables->kt_twid_dft = kernel_tables->kt_twid_dft;
             selector->kernel_tables->kt_rdft = kernel_tables->kt_rdft;
-            selector->kernel_tables->ele_mul[FORWARD_FFT_DIR] =
-                kernel_tables->ele_mul[FORWARD_FFT_DIR];
-            selector->kernel_tables->ele_mul[BACKWARD_FFT_DIR] =
-                kernel_tables->ele_mul[BACKWARD_FFT_DIR];
-            selector->kernel_tables
-                ->ele_mul_strided_in[FORWARD_FFT_DIR] =
-                kernel_tables->ele_mul_strided_in[FORWARD_FFT_DIR];
-            selector->kernel_tables
-                ->ele_mul_strided_in[BACKWARD_FFT_DIR] =
-                kernel_tables->ele_mul_strided_in[BACKWARD_FFT_DIR];
-            selector->kernel_tables->ele_mul_fused_norm[FORWARD_FFT_DIR] =
-                kernel_tables->ele_mul_fused_norm[FORWARD_FFT_DIR];
-            selector->kernel_tables->ele_mul_fused_norm[BACKWARD_FFT_DIR] =
-                kernel_tables->ele_mul_fused_norm[BACKWARD_FFT_DIR];
-            selector->kernel_tables->ele_mul_fused_norm_strided_out[FORWARD_FFT_DIR] =
-                kernel_tables->ele_mul_fused_norm_strided_out[FORWARD_FFT_DIR];
-            selector->kernel_tables->ele_mul_fused_norm_strided_out[BACKWARD_FFT_DIR] =
-                kernel_tables->ele_mul_fused_norm_strided_out[BACKWARD_FFT_DIR];
-            selector->kernel_tables->type_convert_r2c =
-                kernel_tables->type_convert_r2c;
-            selector->kernel_tables->type_convert_c2hc =
-                kernel_tables->type_convert_c2hc;
-            selector->kernel_tables->type_convert_hc2c =
-                kernel_tables->type_convert_hc2c;
-            selector->kernel_tables->type_convert_c2r =
-                kernel_tables->type_convert_c2r;
+            selector->kernel_tables->bs = kernel_tables->bs;
         }
 
         return selector;
@@ -607,6 +583,7 @@ FFTZ_VOID destroy_solution(aoclfftz_solution_t* sol)
 
         release_owned_real_buffered_aux(sol);
         destroy_solution(sol->dft_bufs->nd_sol);
+        destroy_solution(sol->dft_bufs->complex_sol);
         destroy_solution(sol->dft_bufs->sr->odd1_sol);
         destroy_solution(sol->dft_bufs->sr->odd3_sol);
         destroy_solution(sol->next_sol);
