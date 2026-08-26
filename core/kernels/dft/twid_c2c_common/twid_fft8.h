@@ -515,9 +515,9 @@ static FFTZ_VOID TWID_KNAME_FP32(FFTZ_VOID *in_real, FFTZ_VOID *in_imag,
         in_r += (v_in_stride << 1);
         out_r += (v_out_stride << 1);
 #if defined(KERNEL_VARIANT_C2R)
-        in_h2_r += (v_in_h2_stride << 1);
+        in_h2_r += (v_in_h2_stride * 2);
 #elif defined(KERNEL_VARIANT_R2C)
-        out_h2_r += (v_out_h2_stride << 1);
+        out_h2_r += (v_out_h2_stride * 2);
 #endif
         remaining_sets = remaining_sets - NUM_SETS_128_S;
     }
