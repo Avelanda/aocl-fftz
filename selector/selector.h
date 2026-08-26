@@ -236,12 +236,23 @@ FFTZ_INT32 copy_strides_batched_ct_l1_direct(
 // necessary in ND setup where dim_rank & vec_rank will differ for the
 // sub-problem
 FFTZ_VOID copy_solution_obj_wo_dims(aoclfftz_solution_t *to_sol_obj,
-                               aoclfftz_solution_t *from_sol_obj);
+                                    aoclfftz_solution_t *from_sol_obj);
+// True when this real solver owns a complex child on complex_sol (packed or
+// Bluestein), not a real CT/Direct chain. Iterative CT/Direct swap must skip it.
+static inline FFTZ_UINT8
+real_solver_has_complex_subproblem(aoclfftz_solver_type solver_type)
+{
+    return solver_type == SOLVER_REAL_PACKED_R2C ||
+           solver_type == SOLVER_REAL_PACKED_C2R ||
+           solver_type == SOLVER_REAL_BLUESTEIN;
+}
+
 // Reorder the Real FFT CT/Direct nodes for iterative execution only.
 //   Before swap: CT -> Direct -> CT -> Direct -> ... -> Direct
 //   After swap : Direct -> CT -> Direct -> ... -> CT -> Direct
 // In recursive mode the natural CT-first tree is kept (see prepare_and_setup_dft),
 // so this is invoked only when SELECT_REAL_FFT_EXECUTION_ORDER == ITERATIVE.
+// Packed and real-Bluestein roots are skipped
 FFTZ_VOID swap_real_ct_solutions(aoclfftz_selector_t *sel);
 FFTZ_INT32 register_solvers_kernels(kernel_tables_t *kernel_tables,
                                     FFTZ_INT32 dt, FFTZ_INT32 dir,
@@ -287,6 +298,8 @@ FFTZ_INT32 selector_ndim_rdft(aoclfftz_selector_t *sel, kernel_t *kertab,
                          aoclfftz_realhelper_t *realhelper);
 FFTZ_INT32 selector_bluestein_rdft(aoclfftz_selector_t *sel, kernel_t *kertab,
                                    aoclfftz_realhelper_t *realhelper);
+FFTZ_INT32 selector_real_packed_rdft(aoclfftz_selector_t *sel, kernel_t *kertab,
+                                     aoclfftz_realhelper_t *realhelper);
 FFTZ_VOID destroy_handle(FFTZ_VOID *handle);
 FFTZ_VOID fuse_vecs(aoclfftz_solution_t *sol, FFTZ_INT32 is_FFT_ker_supported);
 FFTZ_INT32 check_bluestein_problem(aoclfftz_decomp_scheme_t *decomp_scheme);

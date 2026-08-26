@@ -315,6 +315,10 @@ set(STANDARD_TEST_SUITE
     "R2C_C_MULTI_BATCHED ./aocl_fftz_bench 16:820:415x18:45:23v20:2:2 -b a -f r2c"                            # accuracy | real     | double   | LP64       | 1D  | yes      | Batched   | outplace  | forward   | C       | C Multi Batched 1D R2C with non-fusable batches
     "C2R_C_4D_STRIDED ./aocl_fftz_bench 4:1099:1801x18:61:100x6:10:16x16 -b a -f c2r"                         # accuracy | real     | double   | LP64       | 4D  | no       | NDim      | outplace  | backward  | C       | C 4D C2R with non-fusable dimension
     "C2R_AVX128_3D_NON_FUSABLE_DIM_INPLACE ./aocl_fftz_bench 4:200:400x18:11:22x8:2:2 -r i -f c2r -b a -o 1"  # accuracy | real     | double   | LP64       | 3D  | no       | NDim      | inplace   | backward  | AVX128  | AVX128 C2R 3D real FFT with non-fusable dimension, inplace
+    "AVX512_R2C_PACKED_1D_OP ./aocl_fftz_bench 1024 -f r2c -b a -o 3"                                         # accuracy | real     | double   | LP64       | 1D  | no       | packed    | outplace  | forward   | AVX512  | packed 1D R2C, out-of-place, forward
+    "AVX256_R2C_PACKED_1D_IP ./aocl_fftz_bench 17v1006 -f r2c -r i -b a -o 2"                                 # accuracy | real     | double   | LP64       | 1D  | yes      | packed    | inplace   | forward   | AVX256  | packed 1D R2C, batched, in-place, forward
+    "AVX128_C2R_PACKED_1D_OP ./aocl_fftz_bench 100v550 -f c2r -b a -o 1 -p f -m i"                            # accuracy | real     | float    | ILP64      | 1D  | yes      | packed    | outplace  | backward  | AVX128  | packed 1D C2R, batched, out-of-place, backward
+    "C_C2R_PACKED_1D_IP ./aocl_fftz_bench 42 -f c2r -r i -b a -o 0 -p f"                                      # accuracy | real     | float    | LP64       | 1D  | no       | packed    | inplace   | backward  | C       | packed 1D C2R, in-place, backward
     )
 
     set(EXHAUSTIVE_TEST_SUITE

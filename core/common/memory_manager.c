@@ -195,6 +195,7 @@ aoclfftz_solution_t *alloc_solution(FFTZ_INT32 vec_rank, FFTZ_INT32 dim_rank)
         sol->dft_bufs->ct_buf_imag = NULL;
         sol->dft_bufs->ct_buf_size = 0;
         sol->dft_bufs->ct_buf_allocated = 0;
+        sol->dft_bufs->pack_rdft = NULL;
         sol->solver->kernel_c2c->count = 0;
         sol->solver->kernel_c2c_r->count = 0;
         sol->solver->kernel_r2hc->count = 0;
@@ -267,7 +268,6 @@ aoclfftz_selector_t *alloc_selector(FFTZ_INT32 vec_rank, FFTZ_INT32 dim_rank,
         selector->kernel_tables = NULL;
         selector->exec_metadata = NULL;
         selector->has_nested = has_nested;
-
         selector->solution = alloc_solution(vec_rank, dim_rank);
         ALLOC_ALIGN_UNINIT(selector->cost_analysis, cost_analysis_t,
                            sizeof(cost_analysis_t));
@@ -295,6 +295,7 @@ aoclfftz_selector_t *alloc_selector(FFTZ_INT32 vec_rank, FFTZ_INT32 dim_rank,
             selector->kernel_tables->kt_twid_dft = kernel_tables->kt_twid_dft;
             selector->kernel_tables->kt_rdft = kernel_tables->kt_rdft;
             selector->kernel_tables->bs = kernel_tables->bs;
+            selector->kernel_tables->packed_rdft = kernel_tables->packed_rdft;
         }
 
         return selector;
@@ -609,6 +610,8 @@ FFTZ_VOID destroy_selector_without_solution(aoclfftz_selector_t *sel)
             FREE_ALIGN_ALLOCATED_MEM(sel->exec_metadata->base_ctx.bs_out_base);
             FREE_ALIGN_ALLOCATED_MEM(
                 sel->exec_metadata->base_ctx.c2c_strides_base);
+            FREE_ALIGN_ALLOCATED_MEM(
+                sel->exec_metadata->base_ctx.real_packed_buf_base);
         }
         FREE_ALIGN_ALLOCATED_MEM(sel->exec_metadata);
         FREE_ALIGN_ALLOCATED_MEM(sel);

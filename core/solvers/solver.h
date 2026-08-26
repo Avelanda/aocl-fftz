@@ -64,6 +64,8 @@ typedef enum
     SOLVER_REAL_BLUESTEIN,
     SOLVER_REAL_PERM_KER,
     SOLVER_REAL_SIZEONE,
+    SOLVER_REAL_PACKED_R2C,
+    SOLVER_REAL_PACKED_C2R,
     SOLVER_REAL_MT_DIRECT_R2C,
     SOLVER_REAL_MT_DIRECT_R2C_BATCHED,
     SOLVER_REAL_MT_DIRECT_C2R,
@@ -241,11 +243,14 @@ FFTZ_INT32 setup_real_ct_solver(aoclfftz_solution_t *sol,
                                 FFTZ_UINT32 radix_m,
                                 aoclfftz_realhelper_t *realhelper);
 FFTZ_INT32 setup_real_ndim_solver(aoclfftz_solution_t *sol,
-                             aoclfftz_solution_t *real_dim_sol,
-                             aoclfftz_solution_t *complex_dims_sol,
-                             aoclfftz_realhelper_t *realhelper);
+                                  aoclfftz_solution_t *real_dim_sol,
+                                  aoclfftz_solution_t *complex_dims_sol,
+                                  aoclfftz_realhelper_t *realhelper);
 FFTZ_INT32 setup_real_sizeone_solver(aoclfftz_solution_t *sol);
 FFTZ_INT32 setup_batched_ct_l1_direct_real_solver(aoclfftz_solution_t *sol);
+FFTZ_INT32 setup_real_packed_solver(aoclfftz_solution_t *sol,
+                                    aoclfftz_solution_t *complex_sol,
+                                    kernel_tables_t *kernel_tables);
 #ifdef MULTI_THREADING
 FFTZ_INT32 setup_real_mt_direct_solver(aoclfftz_solution_t *sol,
                                   cost_analysis_t *cost,
@@ -293,6 +298,8 @@ dft_solver_ register_execute_real_buffered_solver(FFTZ_VOID);
 dft_solver_ register_execute_real_ct_solver(FFTZ_VOID);
 dft_solver_ register_execute_real_ndim_solver(FFTZ_VOID);
 dft_solver_ register_execute_real_sizeone_solver(FFTZ_VOID);
+dft_solver_ register_execute_real_packed_r2c(FFTZ_VOID);
+dft_solver_ register_execute_real_packed_c2r(FFTZ_VOID);
 
 #ifdef MULTI_THREADING
 dft_solver_ register_execute_real_mt_direct_r2c(FFTZ_VOID);

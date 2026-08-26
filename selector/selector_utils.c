@@ -197,6 +197,7 @@ FFTZ_INT32 copy_solution_obj( aoclfftz_solution_t *to_sol_obj,
         from_sol_obj->twiddle->load_multi_cols;
 
     // dft_bufs
+    to_sol_obj->dft_bufs->pack_rdft = from_sol_obj->dft_bufs->pack_rdft;
     to_sol_obj->dft_bufs->bluestein->B =
         from_sol_obj->dft_bufs->bluestein->B;
     to_sol_obj->dft_bufs->bluestein->B_out =
@@ -684,6 +685,7 @@ FFTZ_VOID copy_solution_obj_wo_dims( aoclfftz_solution_t *to_sol_obj,
         from_sol_obj->twiddle->twiddle_buf_ptr;
 
     // dft_bufs
+    to_sol_obj->dft_bufs->pack_rdft = from_sol_obj->dft_bufs->pack_rdft;
     to_sol_obj->dft_bufs->bluestein->B = from_sol_obj->dft_bufs->bluestein->B;
     to_sol_obj->dft_bufs->bluestein->B_out =
         from_sol_obj->dft_bufs->bluestein->B_out;
@@ -730,6 +732,15 @@ FFTZ_VOID swap_real_ct_solutions(aoclfftz_selector_t *sel)
     aoclfftz_solution_t *curr = sel->solution;
     aoclfftz_solution_t *prev = NULL;
     aoclfftz_solution_t *next = NULL;
+
+    // Packed / real-Bluestein: next_sol is a complex plan, not a real
+    // CT/Direct chain. Leave the tree alone for every execution-order mode.
+    if (curr == NULL || curr->solver == NULL ||
+        real_solver_has_complex_subproblem(curr->solver->solver_type))
+    {
+        return;
+    }
+
     if (sel->solution->next_sol != NULL)
     {
         /* swap first CT node */
@@ -749,6 +760,13 @@ FFTZ_VOID swap_real_ct_solutions(aoclfftz_selector_t *sel)
         curr = curr->next_sol;
         while (curr && curr->next_sol)
         {
+            // A later real-Bluestein (or packed) node owns a complex
+            // subtree; stop rather than treat that child as real CT.
+            if (curr->solver == NULL ||
+                real_solver_has_complex_subproblem(curr->solver->solver_type))
+            {
+                break;
+            }
             next = curr->next_sol;
             if (curr->solver->solver_type == SOLVER_REAL_CT &&
                 (is_solver_real_direct_family(next->solver->solver_type) ||

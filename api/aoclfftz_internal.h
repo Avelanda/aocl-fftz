@@ -274,6 +274,7 @@ typedef struct aoclfftz_mutable_ctx
                                      // MAX_REAL_KERNEL_RADIX-entry slot per thread
                                      // that may run their C2C kernels
     FFTZ_VOID *transpose_aux_base;   // Standalone-transpose visited-cell bitmap
+    FFTZ_VOID *real_packed_buf_base; // In-place C2R packed scratch slot pool
     FFTZ_INTP ct_offset;             // Byte offset into the ct_buffer,
                                      // accumulated per-thread by mt_batched
     FFTZ_UINT32 flags;               // Plan flags (direction, precision, etc.)
@@ -309,6 +310,7 @@ typedef struct aoclfftz_immutable_metadata
     FFTZ_UINTP c2c_strides_pool_size;   // Real direct solvers' C2C stride
                                         // scratch pool
     FFTZ_UINTP transpose_aux_size;      // Standalone-transpose bitmap size
+    FFTZ_UINTP real_packed_buffer_size; // In-place C2R packed scratch pool size
     aoclfftz_mutable_ctx_t base_ctx;    // execution context built at setup time
     FFTZ_INT32 setup_buffers_acquired;  // 0 = setup-time buffers free; whoever
                                         // grabs them flips to 1, so others
@@ -512,6 +514,10 @@ typedef FFTZ_VOID (*fused_twiddle_transpose_)(FFTZ_VOID *in, FFTZ_VOID *out,
                                         FFTZ_VOID *twiddles, FFTZ_INTP n1,
                                         FFTZ_INTP n2, FFTZ_INTP in_row_stride,
                                         FFTZ_INTP out_row_stride);
+
+// Function pointer shared by real-packed combine and expand kernels.
+typedef FFTZ_VOID (*real_pack_)(FFTZ_VOID *out, const FFTZ_VOID *in,
+                                const FFTZ_VOID *tw, FFTZ_INTP m);
 
 // Holds the Bluestein chirp sequence B and its FFT B_out (computed once
 // during plan setup), plus elementwise-multiply/fused_norm_multiply kernels
@@ -747,6 +753,7 @@ typedef struct aoclfftz_dft_bufs
     // four-step pow2 solver specific data (sub-FFT setups + buffers);
     // heap-allocated on demand (NULL otherwise)
     aoclfftz_pow2_fourstep_t* pow2_fourstep;
+    real_pack_ pack_rdft; // packed R2C recombine / C2R separate kernel
     FFTZ_VOID *ct_buffer; // auxiliary buffer for CT problems
     FFTZ_VOID *ct_buf_real; // real part of ct_buffer
     FFTZ_VOID *ct_buf_imag; // imaginary part of ct_buffer

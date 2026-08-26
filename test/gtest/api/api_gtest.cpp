@@ -869,7 +869,8 @@ INSTANTIATE_TYPED_TEST_SUITE_P(FFTZ_tests_concurrent_execute_io,
 //
 // The cases reach every per-call scratch resource: the aux ping-pong pair,
 // the C2R-only ndim aux, the per-thread stride slots used by the real CT C2C
-// kernels (all sliced by slot_idx), and the Bluestein pool.
+// kernels (all sliced by slot_idx), the Bluestein pool, and in-place C2R packed
+// slots (real_packed_buf_base, sliced by slot_idx).
 // ===========================================================================
 
 template<typename ProblemType>
@@ -889,6 +890,21 @@ TYPED_TEST_P(AoclfftzConcurrentRealTest, REAL_DIRECT)
 TYPED_TEST_P(AoclfftzConcurrentRealTest, REAL_BATCHED_DIRECT)
 {
     concurrent_exec_io::sweep(this, {16}, 8, true);
+}
+
+// 1D even packed (n > MAX_REAL_KERNEL_RADIX). In-place C2R allocates a
+// per-call real_packed_buf_base slab; concurrent execute_io calls must not
+// share it. ST packed uses slot_idx 0; internal_threads>1 falls back to CT.
+TYPED_TEST_P(AoclfftzConcurrentRealTest, REAL_PACKED)
+{
+    concurrent_exec_io::sweep(this, {56}, 1, true);
+}
+
+// Batched packed unit: leftover avl_threads==1 keeps packed. Concurrent
+// execute_io still gets disjoint slabs; MT parent slices slots by slot_idx.
+TYPED_TEST_P(AoclfftzConcurrentRealTest, REAL_BATCHED_PACKED)
+{
+    concurrent_exec_io::sweep(this, {50}, 8, true);
 }
 
 // CT One-level solver: checks ping-pong buffers are not shared between
@@ -966,6 +982,8 @@ REGISTER_TYPED_TEST_SUITE_P(
     AoclfftzConcurrentRealTest,
     REAL_DIRECT,
     REAL_BATCHED_DIRECT,
+    REAL_PACKED,
+    REAL_BATCHED_PACKED,
     REAL_CT_ONE_LEVEL,
     REAL_BATCHED_CT_ONE_LEVEL,
     REAL_CT_MULTILEVEL,
