@@ -246,6 +246,7 @@ typedef struct aoclfftz_buffered aoclfftz_buffered_t;
 typedef struct aoclfftz_sr aoclfftz_sr_t;
 typedef struct aoclfftz_pow2_iterative aoclfftz_pow2_iterative_t;
 typedef struct aoclfftz_pow2_fourstep aoclfftz_pow2_fourstep_t;
+typedef struct aoclfftz_pack_rdft aoclfftz_pack_rdft_t;
 typedef struct aoclfftz_executor aoclfftz_executor_t;
 typedef struct aoclfftz_realhelper aoclfftz_realhelper_t;
 
@@ -515,9 +516,10 @@ typedef FFTZ_VOID (*fused_twiddle_transpose_)(FFTZ_VOID *in, FFTZ_VOID *out,
                                         FFTZ_INTP n2, FFTZ_INTP in_row_stride,
                                         FFTZ_INTP out_row_stride);
 
-// Function pointer shared by real-packed combine and expand kernels.
-typedef FFTZ_VOID (*real_pack_)(FFTZ_VOID *out, const FFTZ_VOID *in,
-                                const FFTZ_VOID *tw, FFTZ_INTP m);
+// Function pointer shared by packed 1D and 3D recombine/separate kernels.
+typedef FFTZ_VOID (*pack_rdft_)(FFTZ_VOID *out, const FFTZ_VOID *in,
+                                const FFTZ_VOID *tw,
+                                const aoclfftz_pack_rdft_t *params);
 
 // Holds the Bluestein chirp sequence B and its FFT B_out (computed once
 // during plan setup), plus elementwise-multiply/fused_norm_multiply kernels
@@ -732,6 +734,25 @@ typedef struct aoclfftz_pow2_fourstep
                            // (active_threads * 2 * buf_bytes)
 } aoclfftz_pow2_fourstep_t;
 
+// Solution-owned kernels and metadata for packed real 1D and 3D transforms.
+//
+// One outer row:
+//   cout has width n0_by2 and stride cout_row_stride.
+//   HC has width and stride n0_by2 + 1.
+//
+// Rank 3 forms conjugate pairs between outer coordinates (i1, i2) and their
+// mirrors.
+typedef struct aoclfftz_pack_rdft
+{
+    pack_rdft_ pack_rdft;      // default 1D/3D execute kernel pointer
+    pack_rdft_ pack_rdft_1d;       // 1D kernel pointer for 3D self-conj rows
+    FFTZ_INTP n0_by2;              // N0 / 2; cout row width in complex values
+    FFTZ_INTP n1;                  // rank-3 outer dimension 1
+    FFTZ_INTP n2;                  // rank-3 outer dimension 2
+    FFTZ_INTP cout_row_stride;     // stride between packed child-output rows
+    FFTZ_UINTP scratch_slot_bytes; // padded in-place C2R scratch slot size
+} aoclfftz_pack_rdft_t;
+
 /////////////////////////// BUFS RELATED : START //////////////////////////////
 typedef struct aoclfftz_dft_bufs
 {
@@ -753,7 +774,7 @@ typedef struct aoclfftz_dft_bufs
     // four-step pow2 solver specific data (sub-FFT setups + buffers);
     // heap-allocated on demand (NULL otherwise)
     aoclfftz_pow2_fourstep_t* pow2_fourstep;
-    real_pack_ pack_rdft; // packed R2C recombine / C2R separate kernel
+    aoclfftz_pack_rdft_t* pack_rdft; // packed 1D/3D kernels and strides
     FFTZ_VOID *ct_buffer; // auxiliary buffer for CT problems
     FFTZ_VOID *ct_buf_real; // real part of ct_buffer
     FFTZ_VOID *ct_buf_imag; // imaginary part of ct_buffer

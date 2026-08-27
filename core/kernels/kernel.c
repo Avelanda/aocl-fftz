@@ -424,7 +424,7 @@ type_convert_ register_hc2c_packed_type_convert_kernel(FFTZ_INT32 cpu_flags,
  * @param[in] dt        Data type (DT_FLOAT or DT_DOUBLE)
  * @return Function pointer to the selected recombine kernel
  */
-real_pack_ register_recombine_to_hc_kernel(FFTZ_INT32 cpu_flags, FFTZ_INT32 dt)
+pack_rdft_ register_recombine_to_hc_kernel(FFTZ_INT32 cpu_flags, FFTZ_INT32 dt)
 {
 #ifdef ENABLE_AVX512
     if (cpu_flags >= optlevel_avx512)
@@ -465,7 +465,7 @@ real_pack_ register_recombine_to_hc_kernel(FFTZ_INT32 cpu_flags, FFTZ_INT32 dt)
  * @param[in] dt        Data type (DT_FLOAT or DT_DOUBLE)
  * @return Function pointer to the selected separate kernel
  */
-real_pack_ register_separate_from_hc_kernel(FFTZ_INT32 cpu_flags, FFTZ_INT32 dt)
+pack_rdft_ register_separate_from_hc_kernel(FFTZ_INT32 cpu_flags, FFTZ_INT32 dt)
 {
 #ifdef ENABLE_AVX512
     if (cpu_flags >= optlevel_avx512)
@@ -490,6 +490,60 @@ real_pack_ register_separate_from_hc_kernel(FFTZ_INT32 cpu_flags, FFTZ_INT32 dt)
 
     /* Default to C implementation */
     return register_separate_from_hc_c(dt);
+}
+
+pack_rdft_ register_recombine_to_hc_3d_kernel(FFTZ_INT32 cpu_flags,
+                                              FFTZ_INT32 dt)
+{
+#ifdef ENABLE_AVX512
+    if (cpu_flags >= optlevel_avx512)
+    {
+        return register_recombine_to_hc_3d_avx512(dt);
+    }
+#endif
+
+#ifdef ENABLE_AVX256
+    if (cpu_flags >= optlevel_avx256)
+    {
+        return register_recombine_to_hc_3d_avx256(dt);
+    }
+#endif
+
+#ifdef ENABLE_AVX128
+    if (cpu_flags >= optlevel_avx128)
+    {
+        return register_recombine_to_hc_3d_avx128(dt);
+    }
+#endif
+
+    return register_recombine_to_hc_3d_c(dt);
+}
+
+pack_rdft_ register_separate_from_hc_3d_kernel(FFTZ_INT32 cpu_flags,
+                                               FFTZ_INT32 dt)
+{
+#ifdef ENABLE_AVX512
+    if (cpu_flags >= optlevel_avx512)
+    {
+        return register_separate_from_hc_3d_avx512(dt);
+    }
+#endif
+
+#ifdef ENABLE_AVX256
+    if (cpu_flags >= optlevel_avx256)
+    {
+        return register_separate_from_hc_3d_avx256(dt);
+    }
+#endif
+
+#ifdef ENABLE_AVX128
+    if (cpu_flags >= optlevel_avx128)
+    {
+        return register_separate_from_hc_3d_avx128(dt);
+    }
+#endif
+
+    return register_separate_from_hc_3d_c(dt);
 }
 
 #undef ACCESS_AVX128

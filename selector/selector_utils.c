@@ -197,7 +197,6 @@ FFTZ_INT32 copy_solution_obj( aoclfftz_solution_t *to_sol_obj,
         from_sol_obj->twiddle->load_multi_cols;
 
     // dft_bufs
-    to_sol_obj->dft_bufs->pack_rdft = from_sol_obj->dft_bufs->pack_rdft;
     to_sol_obj->dft_bufs->bluestein->B =
         from_sol_obj->dft_bufs->bluestein->B;
     to_sol_obj->dft_bufs->bluestein->B_out =
@@ -230,6 +229,18 @@ FFTZ_INT32 copy_solution_obj( aoclfftz_solution_t *to_sol_obj,
         from_sol_obj->dft_bufs->buffered->aux_buf_size_per_thread;
     // Borrower after copy; only the node that malloc'd the pool keeps ownership.
     to_sol_obj->dft_bufs->buffered->is_aux_buffer_allocated = 0;
+    to_sol_obj->dft_bufs->pack_rdft->pack_rdft =
+        from_sol_obj->dft_bufs->pack_rdft->pack_rdft;
+    to_sol_obj->dft_bufs->pack_rdft->pack_rdft_1d =
+        from_sol_obj->dft_bufs->pack_rdft->pack_rdft_1d;
+    to_sol_obj->dft_bufs->pack_rdft->n0_by2 =
+        from_sol_obj->dft_bufs->pack_rdft->n0_by2;
+    to_sol_obj->dft_bufs->pack_rdft->n1 = from_sol_obj->dft_bufs->pack_rdft->n1;
+    to_sol_obj->dft_bufs->pack_rdft->n2 = from_sol_obj->dft_bufs->pack_rdft->n2;
+    to_sol_obj->dft_bufs->pack_rdft->cout_row_stride =
+        from_sol_obj->dft_bufs->pack_rdft->cout_row_stride;
+    to_sol_obj->dft_bufs->pack_rdft->scratch_slot_bytes =
+        from_sol_obj->dft_bufs->pack_rdft->scratch_slot_bytes;
     to_sol_obj->dft_bufs->ct_buffer =
         from_sol_obj->dft_bufs->ct_buffer;
     to_sol_obj->decomp_scheme->thread_info->active_threads =
@@ -685,7 +696,6 @@ FFTZ_VOID copy_solution_obj_wo_dims( aoclfftz_solution_t *to_sol_obj,
         from_sol_obj->twiddle->twiddle_buf_ptr;
 
     // dft_bufs
-    to_sol_obj->dft_bufs->pack_rdft = from_sol_obj->dft_bufs->pack_rdft;
     to_sol_obj->dft_bufs->bluestein->B = from_sol_obj->dft_bufs->bluestein->B;
     to_sol_obj->dft_bufs->bluestein->B_out =
         from_sol_obj->dft_bufs->bluestein->B_out;
@@ -715,6 +725,18 @@ FFTZ_VOID copy_solution_obj_wo_dims( aoclfftz_solution_t *to_sol_obj,
         from_sol_obj->dft_bufs->buffered->aux_buffer_2;
     to_sol_obj->dft_bufs->buffered->aux_buf_size_per_thread =
         from_sol_obj->dft_bufs->buffered->aux_buf_size_per_thread;
+    to_sol_obj->dft_bufs->pack_rdft->pack_rdft =
+        from_sol_obj->dft_bufs->pack_rdft->pack_rdft;
+    to_sol_obj->dft_bufs->pack_rdft->pack_rdft_1d =
+        from_sol_obj->dft_bufs->pack_rdft->pack_rdft_1d;
+    to_sol_obj->dft_bufs->pack_rdft->n0_by2 =
+        from_sol_obj->dft_bufs->pack_rdft->n0_by2;
+    to_sol_obj->dft_bufs->pack_rdft->n1 = from_sol_obj->dft_bufs->pack_rdft->n1;
+    to_sol_obj->dft_bufs->pack_rdft->n2 = from_sol_obj->dft_bufs->pack_rdft->n2;
+    to_sol_obj->dft_bufs->pack_rdft->cout_row_stride =
+        from_sol_obj->dft_bufs->pack_rdft->cout_row_stride;
+    to_sol_obj->dft_bufs->pack_rdft->scratch_slot_bytes =
+        from_sol_obj->dft_bufs->pack_rdft->scratch_slot_bytes;
     to_sol_obj->dft_bufs->ct_buffer =
         from_sol_obj->dft_bufs->ct_buffer;
     to_sol_obj->dft_bufs->ct_buf_real =

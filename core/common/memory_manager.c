@@ -56,6 +56,7 @@ aoclfftz_solution_t *alloc_solution(FFTZ_INT32 vec_rank, FFTZ_INT32 dim_rank)
         sizeof(aoclfftz_strides_grp_t) +
         (4 * sizeof(aoclfftz_strides_t)) +
         sizeof(aoclfftz_dft_bufs_t) +
+        sizeof(aoclfftz_pack_rdft_t) +
         sizeof(aoclfftz_bluestein_t) +
         sizeof(aoclfftz_buffered_t) +
         sizeof(aoclfftz_sr_t) +
@@ -96,7 +97,12 @@ aoclfftz_solution_t *alloc_solution(FFTZ_INT32 vec_rank, FFTZ_INT32 dim_rank)
         sol->strides_grp->strides_r2hcf = (aoclfftz_strides_t*)((FFTZ_UINT8*)sol->strides_grp->strides_r2hc + sizeof(aoclfftz_strides_t));
 
         sol->dft_bufs = (aoclfftz_dft_bufs_t*)((FFTZ_UINT8*)sol->strides_grp->strides_r2hcf + sizeof(aoclfftz_strides_t));
-        sol->dft_bufs->bluestein = (aoclfftz_bluestein_t*)((FFTZ_UINT8*)sol->dft_bufs + sizeof(aoclfftz_dft_bufs_t));
+        sol->dft_bufs->pack_rdft =
+            (aoclfftz_pack_rdft_t*)((FFTZ_UINT8*)sol->dft_bufs +
+                                    sizeof(aoclfftz_dft_bufs_t));
+        sol->dft_bufs->bluestein =
+            (aoclfftz_bluestein_t*)((FFTZ_UINT8*)sol->dft_bufs->pack_rdft +
+                                    sizeof(aoclfftz_pack_rdft_t));
         sol->dft_bufs->buffered = (aoclfftz_buffered_t*)((FFTZ_UINT8*)sol->dft_bufs->bluestein + sizeof(aoclfftz_bluestein_t));
         sol->dft_bufs->sr = (aoclfftz_sr_t*)((FFTZ_UINT8*)sol->dft_bufs->buffered + sizeof(aoclfftz_buffered_t));
         sol->dft_bufs->transpose = (aoclfftz_transpose_t*)((FFTZ_UINT8*)sol->dft_bufs->sr + sizeof(aoclfftz_sr_t));
@@ -195,7 +201,13 @@ aoclfftz_solution_t *alloc_solution(FFTZ_INT32 vec_rank, FFTZ_INT32 dim_rank)
         sol->dft_bufs->ct_buf_imag = NULL;
         sol->dft_bufs->ct_buf_size = 0;
         sol->dft_bufs->ct_buf_allocated = 0;
-        sol->dft_bufs->pack_rdft = NULL;
+        sol->dft_bufs->pack_rdft->pack_rdft = NULL;
+        sol->dft_bufs->pack_rdft->pack_rdft_1d = NULL;
+        sol->dft_bufs->pack_rdft->n0_by2 = 0;
+        sol->dft_bufs->pack_rdft->n1 = 0;
+        sol->dft_bufs->pack_rdft->n2 = 0;
+        sol->dft_bufs->pack_rdft->cout_row_stride = 0;
+        sol->dft_bufs->pack_rdft->scratch_slot_bytes = 0;
         sol->solver->kernel_c2c->count = 0;
         sol->solver->kernel_c2c_r->count = 0;
         sol->solver->kernel_r2hc->count = 0;

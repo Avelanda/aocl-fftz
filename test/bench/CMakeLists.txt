@@ -320,6 +320,10 @@ set(STANDARD_TEST_SUITE
     "AVX256_R2C_PACKED_1D_IP ./aocl_fftz_bench 17v1006 -f r2c -r i -b a -o 2"                                 # accuracy | real     | double   | LP64       | 1D  | yes      | packed    | inplace   | forward   | AVX256  | packed 1D R2C, batched, in-place, forward
     "AVX128_C2R_PACKED_1D_OP ./aocl_fftz_bench 100v550 -f c2r -b a -o 1 -p f -m i"                            # accuracy | real     | float    | ILP64      | 1D  | yes      | packed    | outplace  | backward  | AVX128  | packed 1D C2R, batched, out-of-place, backward
     "C_C2R_PACKED_1D_IP ./aocl_fftz_bench 42 -f c2r -r i -b a -o 0 -p f"                                      # accuracy | real     | float    | LP64       | 1D  | no       | packed    | inplace   | backward  | C       | packed 1D C2R, in-place, backward
+    "AVX512_R2C_PACKED_3D_DIRECT_OP ./aocl_fftz_bench 10v3x24x32 -f r2c -b a -o 3"                            # accuracy | real     | double   | LP64       | 3D  | yes      | packed    | outplace  | forward   | AVX512  | packed 3D R2C, batched, out-of-place, forward
+    "AVX256_R2C_PACKED_3D_DIRECT_IP ./aocl_fftz_bench 18x22x26 -f r2c -r i -b a -o 2 -p f"                    # accuracy | real     | float    | LP64       | 3D  | no       | packed    | inplace   | forward   | AVX256  | packed 3D R2C, in-place, forward
+    "AVX128_C2R_PACKED_3D_DIRECT_OP ./aocl_fftz_bench 20x10x30 -f c2r -b a -o 1 -m i"                         # accuracy | real     | double   | ILP64      | 3D  | no       | packed    | outplace  | backward  | AVX128  | packed 3D C2R, out-of-place, backward
+    "C_C2R_PACKED_3D_DIRECT_IP ./aocl_fftz_bench 25v40x17x30 -f c2r -r i -b a -o 0 -p f"                      # accuracy | real     | float    | LP64       | 3D  | yes      | packed    | inplace   | backward  | C       | packed 3D C2R, batched, in-place, backward
     )
 
     set(EXHAUSTIVE_TEST_SUITE
@@ -466,6 +470,8 @@ set(STANDARD_TEST_SUITE
     "EXT_R2C_C_ND_UNIT_INNERMOST_DIM_IP ./aocl_fftz_bench 3x1 -f r2c -b a -r i -i 20"                         # accuracy | real     | double   | LP64       | 2D  |  no     | ND+sizeone| inplace   | forward   | C       | Real ND R2C, unit-size dim0, inplace; dim0 must survive the dim-rank shrink
     "EXT_R2C_C_ND_UNIT_INNERMOST_DIM_OP ./aocl_fftz_bench 7v1x2x1 -f r2c -b a -r o"                           # accuracy | real     | double   | LP64       | 2D  | yes     | ND+sizeone| outplace  | forward   | C       | Real ND R2C, unit-size dim0, outplace; dim0 must survive the dim-rank shrink
     "EXT_C2R_C_SIZE_ONE_NON_FUSABLE_ND_BATCHED_OP ./aocl_fftz_bench 3:16:16x4:64:64v1 -f c2r -b a -r o -i 5"  # accuracy | real     | double   | LP64       | 1D  | yes     | sizeone   | outplace  | backward  | C       | Strided 3x4 vec rank cannot fuse; covers complex-side stride scaling in the real size-one outer vec loop
+    "EXT_R2C_C_3D_OUTER_INPUT_STRIDED_OP_F ./aocl_fftz_bench 32x3:35:17x4 -f r2c -b a -r o -p f -o 0"         # accuracy | real     | float    | LP64       | 3D  | no      | NDim      | outplace  | forward   | C       | 3D C R2C with non-contiguous outer input stride
+    "EXT_C2R_AVX512_3D_OUTER_OUTPUT_STRIDED_OP ./aocl_fftz_bench 32x3:17:33x4 -f c2r -b a -r o -o 3"          # accuracy | real     | double   | LP64       | 3D  | no      | NDim      | outplace  | backward  | AVX512  | 3D AVX512 C2R with non-contiguous outer output stride
     # TODO: Add more test cases with different combinations. This list is expected to be larger than TEST_SUITE.
     )
 

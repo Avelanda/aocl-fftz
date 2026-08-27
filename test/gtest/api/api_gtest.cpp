@@ -906,6 +906,13 @@ TYPED_TEST_P(AoclfftzConcurrentRealTest, REAL_PACKED)
     concurrent_exec_io::sweep(this, {56}, 1, true);
 }
 
+// 3D even packed. In-place C2R allocates a per-call grid-sized
+// real_packed_buf_base slab; concurrent execute_io calls must not share it.
+TYPED_TEST_P(AoclfftzConcurrentRealTest, REAL_PACKED_3D)
+{
+    concurrent_exec_io::sweep(this, {4, 3, 32}, 1, true);
+}
+
 // Batched packed unit: leftover avl_threads==1 keeps packed. Concurrent
 // execute_io still gets disjoint slabs; MT parent slices slots by slot_idx.
 TYPED_TEST_P(AoclfftzConcurrentRealTest, REAL_BATCHED_PACKED)
@@ -989,6 +996,7 @@ REGISTER_TYPED_TEST_SUITE_P(
     REAL_DIRECT,
     REAL_BATCHED_DIRECT,
     REAL_PACKED,
+    REAL_PACKED_3D,
     REAL_BATCHED_PACKED,
     REAL_CT_ONE_LEVEL,
     REAL_BATCHED_CT_ONE_LEVEL,

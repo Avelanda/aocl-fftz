@@ -13,9 +13,9 @@
  * types and the compiler inlines with no call overhead.
  *
  * Each helper processes NUM_SETS_128_S/D conjugate pairs starting at k: the
- * ascending block k .. k+W-1 pairs with the descending block m-k .. m-k-W+1,
- * loaded contiguously and reversed. For double precision W = 1, so
- * REV_CPLX_128_D is the identity.
+ * ascending block k .. k+W-1 pairs with the descending block n0_by2-k ..
+ * n0_by2-k-W+1, loaded contiguously and reversed. For double precision W = 1,
+ * so REV_CPLX_128_D is the identity.
  *
  * @author Srirammaswamy Srinivasan
  */
@@ -23,7 +23,7 @@
 #ifndef AOCLFFTZ_PACKED_RDFT_AVX128_COMMON_H
 #define AOCLFFTZ_PACKED_RDFT_AVX128_COMMON_H
 
-#include "core/kernels/kernel.h"
+#include "core/kernels/non_dft/real_packed/packed_rdft_common.h"
 #include "core/kernels/simd_includes/simd_common.h"
 
 /**
@@ -67,114 +67,310 @@ static inline __m128d apply_packed_twiddle_128_d(__m128d d, __m128d tw_re,
     return _mm_addsub_pd(_mm_mul_pd(tw_re, rot_arg), rot_tmp);
 }
 
-/**
- * @brief Recombines conjugate pairs into Hermitian output bins.
- *
- * Processes NUM_SETS_128_S fp32 pairs starting at k and mirrored pairs ending
- * at m-k.
- */
-static inline FFTZ_VOID recombine_to_hc_pair_avx128_fp32(
-    FFTZ_FLOAT *p_out, const FFTZ_FLOAT *p_cout, const FFTZ_FLOAT *p_tw_re,
-    const FFTZ_FLOAT *p_tw_im, FFTZ_INTP m, FFTZ_INTP k)
+static inline FFTZ_VOID recombine_to_hc_pair_bases_avx128_fp32(
+    FFTZ_FLOAT *p_out_k, FFTZ_FLOAT *p_out_mk, const FFTZ_FLOAT *p_cout_k,
+    const FFTZ_FLOAT *p_cout_mk, const FFTZ_FLOAT *p_tw_re,
+    const FFTZ_FLOAT *p_tw_im, FFTZ_INTP n0_by2, FFTZ_INTP k)
 {
-    const FFTZ_INTP mk_base = 2 * (m - k - NUM_SETS_128_S + 1);
-    __m128 v_cout_k = _mm_loadu_ps(p_cout + 2 * k);
-    __m128 v_cout_mk_raw = _mm_loadu_ps(p_cout + mk_base);
+    const FFTZ_INTP mk_base = 2 * (n0_by2 - k - NUM_SETS_128_S + 1);
+    __m128 v_cout_k = _mm_loadu_ps(p_cout_k + 2 * k);
+    __m128 v_cout_mk_raw = _mm_loadu_ps(p_cout_mk + mk_base);
     __m128 v_cout_mk = REV_CPLX_128_S(v_cout_mk_raw);
     __m128 v_cout_mk_conj = CONJ_128_S(v_cout_mk);
     __m128 v_sum = _mm_add_ps(v_cout_k, v_cout_mk_conj);
     __m128 v_diff_conj = CONJ_128_S(_mm_sub_ps(v_cout_mk_conj, v_cout_k));
     __m128 v_tw_re = _mm_loadu_ps(p_tw_re + 2 * k);
     __m128 v_tw_im = _mm_loadu_ps(p_tw_im + 2 * k);
-    __m128 v_rot =
-        apply_packed_twiddle_128_s(v_diff_conj, v_tw_re, v_tw_im);
+    __m128 v_rot = apply_packed_twiddle_128_s(v_diff_conj, v_tw_re, v_tw_im);
     __m128 v_out_k = _mm_add_ps(_mm_mul_ps(v_half_128_s, v_sum), v_rot);
     __m128 v_out_mk =
         CONJ_128_S(_mm_sub_ps(_mm_mul_ps(v_half_128_s, v_sum), v_rot));
-    _mm_storeu_ps(p_out + 2 * k, v_out_k);
-    _mm_storeu_ps(p_out + mk_base, REV_CPLX_128_S(v_out_mk));
+    _mm_storeu_ps(p_out_k + 2 * k, v_out_k);
+    _mm_storeu_ps(p_out_mk + mk_base, REV_CPLX_128_S(v_out_mk));
 }
 
-/**
- * @brief Recombines conjugate pairs into Hermitian output bins.
- *
- * Processes NUM_SETS_128_D fp64 pairs starting at k and mirrored pairs ending
- * at m-k.
- */
-static inline FFTZ_VOID recombine_to_hc_pair_avx128_fp64(
-    FFTZ_DOUBLE *p_out, const FFTZ_DOUBLE *p_cout, const FFTZ_DOUBLE *p_tw_re,
-    const FFTZ_DOUBLE *p_tw_im, FFTZ_INTP m, FFTZ_INTP k)
+static inline FFTZ_VOID recombine_to_hc_pair_bases_avx128_fp64(
+    FFTZ_DOUBLE *p_out_k, FFTZ_DOUBLE *p_out_mk, const FFTZ_DOUBLE *p_cout_k,
+    const FFTZ_DOUBLE *p_cout_mk, const FFTZ_DOUBLE *p_tw_re,
+    const FFTZ_DOUBLE *p_tw_im, FFTZ_INTP n0_by2, FFTZ_INTP k)
 {
-    const FFTZ_INTP mk_base = 2 * (m - k - NUM_SETS_128_D + 1);
-    __m128d v_cout_k = _mm_loadu_pd(p_cout + 2 * k);
-    __m128d v_cout_mk_raw = _mm_loadu_pd(p_cout + mk_base);
+    const FFTZ_INTP mk_base = 2 * (n0_by2 - k - NUM_SETS_128_D + 1);
+    __m128d v_cout_k = _mm_loadu_pd(p_cout_k + 2 * k);
+    __m128d v_cout_mk_raw = _mm_loadu_pd(p_cout_mk + mk_base);
     __m128d v_cout_mk = REV_CPLX_128_D(v_cout_mk_raw);
     __m128d v_cout_mk_conj = CONJ_128_D(v_cout_mk);
     __m128d v_sum = _mm_add_pd(v_cout_k, v_cout_mk_conj);
     __m128d v_diff_conj = CONJ_128_D(_mm_sub_pd(v_cout_mk_conj, v_cout_k));
     __m128d v_tw_re = _mm_loadu_pd(p_tw_re + 2 * k);
     __m128d v_tw_im = _mm_loadu_pd(p_tw_im + 2 * k);
-    __m128d v_rot =
-        apply_packed_twiddle_128_d(v_diff_conj, v_tw_re, v_tw_im);
+    __m128d v_rot = apply_packed_twiddle_128_d(v_diff_conj, v_tw_re, v_tw_im);
     __m128d v_out_k = _mm_add_pd(_mm_mul_pd(v_half_128_d, v_sum), v_rot);
     __m128d v_out_mk =
         CONJ_128_D(_mm_sub_pd(_mm_mul_pd(v_half_128_d, v_sum), v_rot));
-    _mm_storeu_pd(p_out + 2 * k, v_out_k);
-    _mm_storeu_pd(p_out + mk_base, REV_CPLX_128_D(v_out_mk));
+    _mm_storeu_pd(p_out_k + 2 * k, v_out_k);
+    _mm_storeu_pd(p_out_mk + mk_base, REV_CPLX_128_D(v_out_mk));
 }
 
-/**
- * @brief Separates Hermitian pairs into packed complex values.
- *
- * Reconstructs the double-length child spectrum for NUM_SETS_128_S
- * fp32 pairs starting at k and mirrored pairs ending at m-k.
- */
-static inline FFTZ_VOID separate_from_hc_pair_avx128_fp32(
-    FFTZ_FLOAT *p_cout, const FFTZ_FLOAT *p_in, const FFTZ_FLOAT *p_tw_re,
-    const FFTZ_FLOAT *p_tw_im, FFTZ_INTP m, FFTZ_INTP k)
+static inline FFTZ_VOID separate_from_hc_pair_bases_avx128_fp32(
+    FFTZ_FLOAT *p_cout_k, FFTZ_FLOAT *p_cout_mk, const FFTZ_FLOAT *p_in_k,
+    const FFTZ_FLOAT *p_in_mk, const FFTZ_FLOAT *p_tw_re,
+    const FFTZ_FLOAT *p_tw_im, FFTZ_INTP n0_by2, FFTZ_INTP k)
 {
-    const FFTZ_INTP mk_base = 2 * (m - k - NUM_SETS_128_S + 1);
-    __m128 v_in_k = _mm_loadu_ps(p_in + 2 * k);
-    __m128 v_in_mk_raw = _mm_loadu_ps(p_in + mk_base);
+    const FFTZ_INTP mk_base = 2 * (n0_by2 - k - NUM_SETS_128_S + 1);
+    __m128 v_in_k = _mm_loadu_ps(p_in_k + 2 * k);
+    __m128 v_in_mk_raw = _mm_loadu_ps(p_in_mk + mk_base);
     __m128 v_in_mk = REV_CPLX_128_S(v_in_mk_raw);
     __m128 v_in_mk_conj = CONJ_128_S(v_in_mk);
     __m128 v_base = _mm_add_ps(v_in_k, v_in_mk_conj);
     __m128 v_delta = _mm_sub_ps(v_in_k, v_in_mk_conj);
     __m128 v_tw_re = _mm_loadu_ps(p_tw_re + 2 * k);
     __m128 v_tw_im = _mm_loadu_ps(p_tw_im + 2 * k);
-    __m128 v_corr_half =
-        apply_packed_twiddle_128_s(v_delta, v_tw_re, v_tw_im);
+    __m128 v_corr_half = apply_packed_twiddle_128_s(v_delta, v_tw_re, v_tw_im);
     __m128 v_corr = _mm_mul_ps(v_corr_half, v_sign_128_s);
     __m128 v_cout_mk = CONJ_128_S(_mm_sub_ps(v_base, v_corr));
-    _mm_storeu_ps(p_cout + 2 * k, _mm_add_ps(v_base, v_corr));
-    _mm_storeu_ps(p_cout + mk_base, REV_CPLX_128_S(v_cout_mk));
+    _mm_storeu_ps(p_cout_k + 2 * k, _mm_add_ps(v_base, v_corr));
+    _mm_storeu_ps(p_cout_mk + mk_base, REV_CPLX_128_S(v_cout_mk));
 }
 
-/**
- * @brief Separates Hermitian pairs into packed complex values.
- *
- * Reconstructs the double-length child spectrum for NUM_SETS_128_D
- * fp64 pairs starting at k and mirrored pairs ending at m-k.
- */
-static inline FFTZ_VOID separate_from_hc_pair_avx128_fp64(
-    FFTZ_DOUBLE *p_cout, const FFTZ_DOUBLE *p_in, const FFTZ_DOUBLE *p_tw_re,
-    const FFTZ_DOUBLE *p_tw_im, FFTZ_INTP m, FFTZ_INTP k)
+static inline FFTZ_VOID separate_from_hc_pair_bases_avx128_fp64(
+    FFTZ_DOUBLE *p_cout_k, FFTZ_DOUBLE *p_cout_mk, const FFTZ_DOUBLE *p_in_k,
+    const FFTZ_DOUBLE *p_in_mk, const FFTZ_DOUBLE *p_tw_re,
+    const FFTZ_DOUBLE *p_tw_im, FFTZ_INTP n0_by2, FFTZ_INTP k)
 {
-    const FFTZ_INTP mk_base = 2 * (m - k - NUM_SETS_128_D + 1);
-    __m128d v_in_k = _mm_loadu_pd(p_in + 2 * k);
-    __m128d v_in_mk_raw = _mm_loadu_pd(p_in + mk_base);
+    const FFTZ_INTP mk_base = 2 * (n0_by2 - k - NUM_SETS_128_D + 1);
+    __m128d v_in_k = _mm_loadu_pd(p_in_k + 2 * k);
+    __m128d v_in_mk_raw = _mm_loadu_pd(p_in_mk + mk_base);
     __m128d v_in_mk = REV_CPLX_128_D(v_in_mk_raw);
     __m128d v_in_mk_conj = CONJ_128_D(v_in_mk);
     __m128d v_base = _mm_add_pd(v_in_k, v_in_mk_conj);
     __m128d v_delta = _mm_sub_pd(v_in_k, v_in_mk_conj);
     __m128d v_tw_re = _mm_loadu_pd(p_tw_re + 2 * k);
     __m128d v_tw_im = _mm_loadu_pd(p_tw_im + 2 * k);
-    __m128d v_corr_half =
-        apply_packed_twiddle_128_d(v_delta, v_tw_re, v_tw_im);
+    __m128d v_corr_half = apply_packed_twiddle_128_d(v_delta, v_tw_re, v_tw_im);
     __m128d v_corr = _mm_mul_pd(v_corr_half, v_sign_128_d);
     __m128d v_cout_mk = CONJ_128_D(_mm_sub_pd(v_base, v_corr));
-    _mm_storeu_pd(p_cout + 2 * k, _mm_add_pd(v_base, v_corr));
-    _mm_storeu_pd(p_cout + mk_base, REV_CPLX_128_D(v_cout_mk));
+    _mm_storeu_pd(p_cout_k + 2 * k, _mm_add_pd(v_base, v_corr));
+    _mm_storeu_pd(p_cout_mk + mk_base, REV_CPLX_128_D(v_cout_mk));
+}
+
+/**
+ * @brief Recombines conjugate pairs into Hermitian output bins.
+ *
+ * Processes NUM_SETS_128_S fp32 pairs starting at k and mirrored pairs ending
+ * at n0_by2-k.
+ */
+static inline FFTZ_VOID recombine_to_hc_pair_avx128_fp32(
+    FFTZ_FLOAT *p_out, const FFTZ_FLOAT *p_cout, const FFTZ_FLOAT *p_tw_re,
+    const FFTZ_FLOAT *p_tw_im, FFTZ_INTP n0_by2, FFTZ_INTP k)
+{
+    recombine_to_hc_pair_bases_avx128_fp32(p_out, p_out, p_cout, p_cout,
+                                           p_tw_re, p_tw_im, n0_by2, k);
+}
+
+/**
+ * @brief Recombines conjugate pairs into Hermitian output bins.
+ *
+ * Processes NUM_SETS_128_D fp64 pairs starting at k and mirrored pairs ending
+ * at n0_by2-k.
+ */
+static inline FFTZ_VOID recombine_to_hc_pair_avx128_fp64(
+    FFTZ_DOUBLE *p_out, const FFTZ_DOUBLE *p_cout, const FFTZ_DOUBLE *p_tw_re,
+    const FFTZ_DOUBLE *p_tw_im, FFTZ_INTP n0_by2, FFTZ_INTP k)
+{
+    recombine_to_hc_pair_bases_avx128_fp64(p_out, p_out, p_cout, p_cout,
+                                           p_tw_re, p_tw_im, n0_by2, k);
+}
+
+/**
+ * @brief Separates Hermitian pairs into packed complex values.
+ *
+ * Reconstructs the double-length child spectrum for NUM_SETS_128_S
+ * fp32 pairs starting at k and mirrored pairs ending at n0_by2-k.
+ */
+static inline FFTZ_VOID separate_from_hc_pair_avx128_fp32(
+    FFTZ_FLOAT *p_cout, const FFTZ_FLOAT *p_in, const FFTZ_FLOAT *p_tw_re,
+    const FFTZ_FLOAT *p_tw_im, FFTZ_INTP n0_by2, FFTZ_INTP k)
+{
+    separate_from_hc_pair_bases_avx128_fp32(p_cout, p_cout, p_in, p_in, p_tw_re,
+                                            p_tw_im, n0_by2, k);
+}
+
+/**
+ * @brief Separates Hermitian pairs into packed complex values.
+ *
+ * Reconstructs the double-length child spectrum for NUM_SETS_128_D
+ * fp64 pairs starting at k and mirrored pairs ending at n0_by2-k.
+ */
+static inline FFTZ_VOID separate_from_hc_pair_avx128_fp64(
+    FFTZ_DOUBLE *p_cout, const FFTZ_DOUBLE *p_in, const FFTZ_DOUBLE *p_tw_re,
+    const FFTZ_DOUBLE *p_tw_im, FFTZ_INTP n0_by2, FFTZ_INTP k)
+{
+    separate_from_hc_pair_bases_avx128_fp64(p_cout, p_cout, p_in, p_in, p_tw_re,
+                                            p_tw_im, n0_by2, k);
+}
+
+static inline FFTZ_VOID recombine_to_hc_row_pair_fp32_avx128(
+    FFTZ_FLOAT *p_out_row, FFTZ_FLOAT *p_out_mirror,
+    const FFTZ_FLOAT *p_cout_row, const FFTZ_FLOAT *p_cout_mirror,
+    const FFTZ_FLOAT *p_tw_re, const FFTZ_FLOAT *p_tw_im, FFTZ_INTP n0_by2,
+    FFTZ_INTP num_pairs)
+{
+    recombine_to_hc_dc_nyq_pair_fp32(p_out_row, p_out_mirror, p_cout_row,
+                                     p_cout_mirror, n0_by2, 1);
+    FFTZ_INTP remaining = num_pairs % NUM_SETS_128_S;
+    FFTZ_INTP count;
+    for (count = 1; count <= num_pairs - remaining; count += NUM_SETS_128_S)
+    {
+        recombine_to_hc_pair_bases_avx128_fp32(p_out_row, p_out_mirror,
+                                               p_cout_row, p_cout_mirror,
+                                               p_tw_re, p_tw_im, n0_by2, count);
+    }
+    if (remaining & NUM_SETS_C_S)
+    {
+        recombine_to_hc_pair_bases_fp32(p_out_row, p_out_mirror, p_cout_row,
+                                        p_cout_mirror, p_tw_re, p_tw_im, n0_by2,
+                                        count);
+    }
+    for (count = 1; count <= num_pairs - remaining; count += NUM_SETS_128_S)
+    {
+        recombine_to_hc_pair_bases_avx128_fp32(p_out_mirror, p_out_row,
+                                               p_cout_mirror, p_cout_row,
+                                               p_tw_re, p_tw_im, n0_by2, count);
+    }
+    if (remaining & NUM_SETS_C_S)
+    {
+        recombine_to_hc_pair_bases_fp32(p_out_mirror, p_out_row, p_cout_mirror,
+                                        p_cout_row, p_tw_re, p_tw_im, n0_by2,
+                                        count);
+    }
+    if ((n0_by2 & 1) == 0)
+    {
+        recombine_to_hc_pair_middle_fp32(p_out_row, p_out_mirror, p_cout_row,
+                                         p_cout_mirror, n0_by2);
+    }
+}
+
+static inline FFTZ_VOID recombine_to_hc_row_pair_fp64_avx128(
+    FFTZ_DOUBLE *p_out_row, FFTZ_DOUBLE *p_out_mirror,
+    const FFTZ_DOUBLE *p_cout_row, const FFTZ_DOUBLE *p_cout_mirror,
+    const FFTZ_DOUBLE *p_tw_re, const FFTZ_DOUBLE *p_tw_im, FFTZ_INTP n0_by2,
+    FFTZ_INTP num_pairs)
+{
+    recombine_to_hc_dc_nyq_pair_fp64(p_out_row, p_out_mirror, p_cout_row,
+                                     p_cout_mirror, n0_by2, 1);
+    FFTZ_INTP remaining = num_pairs % NUM_SETS_128_D;
+    FFTZ_INTP count;
+    for (count = 1; count <= num_pairs - remaining; count += NUM_SETS_128_D)
+    {
+        recombine_to_hc_pair_bases_avx128_fp64(p_out_row, p_out_mirror,
+                                               p_cout_row, p_cout_mirror,
+                                               p_tw_re, p_tw_im, n0_by2, count);
+    }
+    for (; count <= num_pairs; count++)
+    {
+        recombine_to_hc_pair_bases_fp64(p_out_row, p_out_mirror, p_cout_row,
+                                        p_cout_mirror, p_tw_re, p_tw_im, n0_by2,
+                                        count);
+    }
+    for (count = 1; count <= num_pairs - remaining; count += NUM_SETS_128_D)
+    {
+        recombine_to_hc_pair_bases_avx128_fp64(p_out_mirror, p_out_row,
+                                               p_cout_mirror, p_cout_row,
+                                               p_tw_re, p_tw_im, n0_by2, count);
+    }
+    for (; count <= num_pairs; count++)
+    {
+        recombine_to_hc_pair_bases_fp64(p_out_mirror, p_out_row, p_cout_mirror,
+                                        p_cout_row, p_tw_re, p_tw_im, n0_by2,
+                                        count);
+    }
+    if ((n0_by2 & 1) == 0)
+    {
+        recombine_to_hc_pair_middle_fp64(p_out_row, p_out_mirror, p_cout_row,
+                                         p_cout_mirror, n0_by2);
+    }
+}
+
+static inline FFTZ_VOID separate_from_hc_row_pair_fp32_avx128(
+    FFTZ_FLOAT *p_cout_row, FFTZ_FLOAT *p_cout_mirror,
+    const FFTZ_FLOAT *p_in_row, const FFTZ_FLOAT *p_in_mirror,
+    const FFTZ_FLOAT *p_tw_re, const FFTZ_FLOAT *p_tw_im, FFTZ_INTP n0_by2,
+    FFTZ_INTP num_pairs)
+{
+    separate_from_hc_cout0_fp32(p_cout_row, p_in_row, p_in_mirror, n0_by2);
+    separate_from_hc_cout0_fp32(p_cout_mirror, p_in_mirror, p_in_row, n0_by2);
+    FFTZ_INTP remaining = num_pairs % NUM_SETS_128_S;
+    FFTZ_INTP count;
+    for (count = 1; count <= num_pairs - remaining; count += NUM_SETS_128_S)
+    {
+        separate_from_hc_pair_bases_avx128_fp32(p_cout_row, p_cout_mirror,
+                                                p_in_row, p_in_mirror, p_tw_re,
+                                                p_tw_im, n0_by2, count);
+    }
+    if (remaining & NUM_SETS_C_S)
+    {
+        separate_from_hc_pair_bases_fp32(p_cout_row, p_cout_mirror, p_in_row,
+                                         p_in_mirror, p_tw_re, p_tw_im, n0_by2,
+                                         count);
+    }
+    for (count = 1; count <= num_pairs - remaining; count += NUM_SETS_128_S)
+    {
+        separate_from_hc_pair_bases_avx128_fp32(p_cout_mirror, p_cout_row,
+                                                p_in_mirror, p_in_row, p_tw_re,
+                                                p_tw_im, n0_by2, count);
+    }
+    if (remaining & NUM_SETS_C_S)
+    {
+        separate_from_hc_pair_bases_fp32(p_cout_mirror, p_cout_row, p_in_mirror,
+                                         p_in_row, p_tw_re, p_tw_im, n0_by2,
+                                         count);
+    }
+    if ((n0_by2 & 1) == 0)
+    {
+        separate_from_hc_pair_middle_fp32(p_cout_row, p_cout_mirror, p_in_row,
+                                          p_in_mirror, n0_by2);
+    }
+}
+
+static inline FFTZ_VOID separate_from_hc_row_pair_fp64_avx128(
+    FFTZ_DOUBLE *p_cout_row, FFTZ_DOUBLE *p_cout_mirror,
+    const FFTZ_DOUBLE *p_in_row, const FFTZ_DOUBLE *p_in_mirror,
+    const FFTZ_DOUBLE *p_tw_re, const FFTZ_DOUBLE *p_tw_im, FFTZ_INTP n0_by2,
+    FFTZ_INTP num_pairs)
+{
+    separate_from_hc_cout0_fp64(p_cout_row, p_in_row, p_in_mirror, n0_by2);
+    separate_from_hc_cout0_fp64(p_cout_mirror, p_in_mirror, p_in_row, n0_by2);
+    FFTZ_INTP remaining = num_pairs % NUM_SETS_128_D;
+    FFTZ_INTP count;
+    for (count = 1; count <= num_pairs - remaining; count += NUM_SETS_128_D)
+    {
+        separate_from_hc_pair_bases_avx128_fp64(p_cout_row, p_cout_mirror,
+                                                p_in_row, p_in_mirror, p_tw_re,
+                                                p_tw_im, n0_by2, count);
+    }
+    for (; count <= num_pairs; count++)
+    {
+        separate_from_hc_pair_bases_fp64(p_cout_row, p_cout_mirror, p_in_row,
+                                         p_in_mirror, p_tw_re, p_tw_im, n0_by2,
+                                         count);
+    }
+    for (count = 1; count <= num_pairs - remaining; count += NUM_SETS_128_D)
+    {
+        separate_from_hc_pair_bases_avx128_fp64(p_cout_mirror, p_cout_row,
+                                                p_in_mirror, p_in_row, p_tw_re,
+                                                p_tw_im, n0_by2, count);
+    }
+    for (; count <= num_pairs; count++)
+    {
+        separate_from_hc_pair_bases_fp64(p_cout_mirror, p_cout_row, p_in_mirror,
+                                         p_in_row, p_tw_re, p_tw_im, n0_by2,
+                                         count);
+    }
+    if ((n0_by2 & 1) == 0)
+    {
+        separate_from_hc_pair_middle_fp64(p_cout_row, p_cout_mirror, p_in_row,
+                                          p_in_mirror, n0_by2);
+    }
 }
 
 #endif // AOCLFFTZ_PACKED_RDFT_AVX128_COMMON_H

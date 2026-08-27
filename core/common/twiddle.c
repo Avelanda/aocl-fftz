@@ -433,17 +433,17 @@ FFTZ_VOID compute_sr_twiddle_buffer(FFTZ_VOID *twiddle_buffer, FFTZ_INTP n,
     }
 }
 
-// Fill two pre-broadcast blocks for k = 0..m/2: 0.5*cos first, then
-// -0.5*sin at offset 2*(m/2+1).
+// Fill two pre-broadcast blocks for k = 0..n0_by2/2: 0.5*cos first, then
+// -0.5*sin at offset 2*(n0_by2/2+1).
 static FFTZ_VOID compute_real_packed_twiddle_float(FFTZ_VOID *twiddle_buffer,
                                                    FFTZ_INTP n)
 {
     FFTZ_FLOAT *tw = (FFTZ_FLOAT *)twiddle_buffer;
-    FFTZ_INTP m = n / 2;
-    FFTZ_INTP offset = 2 * (m / 2 + 1);
+    FFTZ_INTP n0_by2 = n / 2;
+    FFTZ_INTP offset = 2 * (n0_by2 / 2 + 1);
     FFTZ_FLOAT angle_base = AOCLFFTZ_2_PIf / (FFTZ_FLOAT)n;
 
-    for (FFTZ_INTP k = 0; k <= m / 2; k++)
+    for (FFTZ_INTP k = 0; k <= n0_by2 / 2; k++)
     {
         FFTZ_FLOAT angle = angle_base * (FFTZ_FLOAT)k;
         FFTZ_FLOAT cos_angle = cosf(angle);
@@ -459,11 +459,11 @@ static FFTZ_VOID compute_real_packed_twiddle_double(FFTZ_VOID *twiddle_buffer,
                                                     FFTZ_INTP n)
 {
     FFTZ_DOUBLE *tw = (FFTZ_DOUBLE *)twiddle_buffer;
-    FFTZ_INTP m = n / 2;
-    FFTZ_INTP offset = 2 * (m / 2 + 1);
+    FFTZ_INTP n0_by2 = n / 2;
+    FFTZ_INTP offset = 2 * (n0_by2 / 2 + 1);
     FFTZ_DOUBLE angle_base = AOCLFFTZ_2_PI / (FFTZ_DOUBLE)n;
 
-    for (FFTZ_INTP k = 0; k <= m / 2; k++)
+    for (FFTZ_INTP k = 0; k <= n0_by2 / 2; k++)
     {
         FFTZ_DOUBLE angle = angle_base * (FFTZ_DOUBLE)k;
         FFTZ_DOUBLE cos_angle = cos(angle);

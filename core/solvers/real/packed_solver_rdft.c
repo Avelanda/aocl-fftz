@@ -3,19 +3,47 @@
 
 /** @file packed_solver_rdft.c
  *
- *  @brief Real-packed R2C/C2R solver.
+ *  @brief Real-packed R2C/C2R solver for 1D and 3D problems.
  *
  *  setup_real_packed_solver copies the parent decomp onto the child,
  *  reconfigures it as a complex FFT(M) with packed-safe placement, and
- *  binds the recombine (forward) / separate (backward) kernel. The selector
- *  then models that child and attaches next_sol. The recombine/separate
- *  twiddle table is built afterwards by the common selector twiddle setup.
+ *  binds the recombine (forward) / separate (backward) kernel. Rank 3 also
+ *  fills pack_rdft metadata and uses a child CFFT of size M x N1 x N2. The
+ *  selector then models that child and attaches next_sol. The
+ *  recombine/separate twiddle table is built afterwards by the common selector
+ *  twiddle setup.
  *
  *  @author Srirammaswamy Srinivasan
  */
 
 #include "selector/selector.h"
 #include "utils/allocator.h"
+
+static FFTZ_VOID configure_pack_rdft_child_3d(
+    aoclfftz_decomp_scheme_t *child, const aoclfftz_decomp_scheme_t *parent,
+    FFTZ_INTP n0_by2, FFTZ_INTP in_row_stride, FFTZ_INTP out_row_stride)
+{
+    child->dim_rank = parent->dim_rank;
+    child->vec_rank = 1;
+    child->dims[0].n = n0_by2;
+    child->dims[0].in_stride = 1;
+    child->dims[0].out_stride = 1;
+
+    FFTZ_INTP in_stride = in_row_stride;
+    FFTZ_INTP out_stride = out_row_stride;
+    for (FFTZ_INT32 dim = 1; dim < parent->dim_rank; dim++)
+    {
+        FFTZ_INTP length = parent->dims[dim].n;
+        child->dims[dim].n = length;
+        child->dims[dim].in_stride = in_stride;
+        child->dims[dim].out_stride = out_stride;
+        in_stride *= length;
+        out_stride *= length;
+    }
+    child->vecs[0].n = 1;
+    child->vecs[0].in_stride = in_stride;
+    child->vecs[0].out_stride = out_stride;
+}
 
 FFTZ_INT32 setup_real_packed_solver(aoclfftz_solution_t *sol,
                                     aoclfftz_solution_t *complex_sol,
@@ -28,7 +56,7 @@ FFTZ_INT32 setup_real_packed_solver(aoclfftz_solution_t *sol,
     FFTZ_INT32 dt_bytes = DT_PRECISION_BYTES(dt_prec);
     FFTZ_UINT8 direction = FFT_DIR(parent_decomp->flags);
     FFTZ_INTP n = parent_decomp->dims[0].n;
-    FFTZ_INTP m = n >> 1; // child complex FFT length (N real values -> N/2 complex values)
+    FFTZ_INTP n0_by2 = n >> 1;
 
     FFTZ_INT32 ret =
         copy_decomp_scheme(complex_sol->decomp_scheme, parent_decomp);
@@ -44,12 +72,12 @@ FFTZ_INT32 setup_real_packed_solver(aoclfftz_solution_t *sol,
     aoclfftz_decomp_scheme_t *complex_decomp = complex_sol->decomp_scheme;
     complex_decomp->dim_rank = 1;
     complex_decomp->vec_rank = 1;
-    complex_decomp->dims[0].n = m;
+    complex_decomp->dims[0].n = n0_by2;
     complex_decomp->dims[0].in_stride = 1;
     complex_decomp->dims[0].out_stride = 1;
     complex_decomp->vecs[0].n = 1;
-    complex_decomp->vecs[0].in_stride = m;
-    complex_decomp->vecs[0].out_stride = m;
+    complex_decomp->vecs[0].in_stride = n0_by2;
+    complex_decomp->vecs[0].out_stride = n0_by2;
 
     SET_COMPLEX(complex_decomp->flags);
     SET_FFT_DIR(complex_decomp->flags, direction);
@@ -85,9 +113,39 @@ FFTZ_INT32 setup_real_packed_solver(aoclfftz_solution_t *sol,
         complex_decomp->out_imag = complex_decomp->in_imag;
     }
 
-    sol->dft_bufs->pack_rdft = (direction == FORWARD_FFT_DIR)
-                                 ? kernel_tables->packed_rdft.recombine
-                                 : kernel_tables->packed_rdft.separate;
+    aoclfftz_pack_rdft_t *params = sol->dft_bufs->pack_rdft;
+    params->pack_rdft_1d = (direction == FORWARD_FFT_DIR)
+                               ? kernel_tables->packed_rdft.recombine
+                               : kernel_tables->packed_rdft.separate;
+    params->pack_rdft = params->pack_rdft_1d;
+    params->n0_by2 = n0_by2;
+
+    if (parent_decomp->dim_rank == 3)
+    {
+        FFTZ_INTP child_in_row_stride;
+        FFTZ_INTP child_out_row_stride;
+        if (direction == FORWARD_FFT_DIR)
+        {
+            child_in_row_stride = parent_oop ? n0_by2 : n0_by2 + 1;
+            child_out_row_stride = n0_by2 + 1;
+        }
+        else
+        {
+            child_in_row_stride = n0_by2;
+            child_out_row_stride = parent_oop ? n0_by2 : n0_by2 + 1;
+        }
+        configure_pack_rdft_child_3d(complex_decomp, parent_decomp, n0_by2,
+                                     child_in_row_stride, child_out_row_stride);
+
+        params->pack_rdft = (direction == FORWARD_FFT_DIR)
+                                ? kernel_tables->packed_rdft.recombine_3d
+                                : kernel_tables->packed_rdft.separate_3d;
+        params->n1 = parent_decomp->dims[1].n;
+        params->n2 = parent_decomp->dims[2].n;
+        params->cout_row_stride = (direction == FORWARD_FFT_DIR)
+                                      ? child_out_row_stride
+                                      : child_in_row_stride;
+    }
 
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Exit");
     return SOLVER_SUCCESS;
@@ -100,7 +158,6 @@ static FFTZ_INT32 execute_real_packed_r2c(aoclfftz_solution_t *sol,
 
     aoclfftz_solution_t *complex_sol = sol->next_sol;
     FFTZ_INT32 dt_bytes = CTX_DT_SIZE(ctx);
-    FFTZ_INTP m = sol->decomp_scheme->dims[0].n >> 1;
     FFTZ_VOID *in_real = ctx->in_real;
     FFTZ_VOID *out_real = ctx->out_real;
 
@@ -120,8 +177,9 @@ static FFTZ_INT32 execute_real_packed_r2c(aoclfftz_solution_t *sol,
 
     // R2C recombine may overwrite: child spectrum and Hermitian result share
     // out_real.
-    sol->dft_bufs->pack_rdft(out_real, out_real, sol->twiddle->twiddle_buf_ptr,
-                           m);
+    aoclfftz_pack_rdft_t *params = sol->dft_bufs->pack_rdft;
+    params->pack_rdft(out_real, out_real, sol->twiddle->twiddle_buf_ptr,
+                      params);
 
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Exit");
     return SOLVER_SUCCESS;
@@ -134,9 +192,9 @@ static FFTZ_INT32 execute_real_packed_c2r(aoclfftz_solution_t *sol,
 
     aoclfftz_solution_t *complex_sol = sol->next_sol;
     FFTZ_INT32 dt_bytes = CTX_DT_SIZE(ctx);
-    FFTZ_INTP m = sol->decomp_scheme->dims[0].n >> 1;
     FFTZ_VOID *in_real = ctx->in_real;
     FFTZ_VOID *out_real = ctx->out_real;
+    aoclfftz_pack_rdft_t *params = sol->dft_bufs->pack_rdft;
     // C2R separate must not overwrite the Hermitian input.
     // Out-of-place C2R writes the double-length complex sequence into out_real.
     // In-place C2R still holds HC in in==out, so that sequence goes to packed
@@ -144,12 +202,11 @@ static FFTZ_INT32 execute_real_packed_c2r(aoclfftz_solution_t *sol,
     FFTZ_VOID *cout = out_real;
     if (!IS_OUT_OF_PLACE(ctx->flags))
     {
-        FFTZ_INTP slot_bytes = GET_PADDED_SIZE(2 * m * dt_bytes);
         cout = MOVE_ADDR(ctx->real_packed_buf_base,
-                         (FFTZ_INTP)ctx->slot_idx * slot_bytes);
+                   (FFTZ_UINTP)ctx->slot_idx * params->scratch_slot_bytes);
     }
 
-    sol->dft_bufs->pack_rdft(cout, in_real, sol->twiddle->twiddle_buf_ptr, m);
+    params->pack_rdft(cout, in_real, sol->twiddle->twiddle_buf_ptr, params);
 
     aoclfftz_mutable_ctx_t c2c_child_ctx = *ctx;
     c2c_child_ctx.in_real = cout;

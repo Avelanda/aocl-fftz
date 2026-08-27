@@ -125,8 +125,10 @@ typedef struct bluestein_kernels
 // separate is the C2R DIF first stage.
 typedef struct packed_rdft_kernels
 {
-    real_pack_ recombine;
-    real_pack_ separate;
+    pack_rdft_ recombine;
+    pack_rdft_ separate;
+    pack_rdft_ recombine_3d;
+    pack_rdft_ separate_3d;
 } packed_rdft_kernels_t;
 
 // Group of kernel tables holding different variants, registered once per plan
@@ -203,8 +205,13 @@ register_fused_twiddle_transpose_kernel(FFTZ_INT32 cpu_flags, FFTZ_INT32 dt,
                                         FFTZ_UINT8 direction);
 
 // Selects the packed RDFT recombine (forward) / separate (backward) kernel
-real_pack_ register_recombine_to_hc_kernel(FFTZ_INT32 cpu_flags, FFTZ_INT32 dt);
-real_pack_ register_separate_from_hc_kernel(FFTZ_INT32 cpu_flags, FFTZ_INT32 dt);
+pack_rdft_ register_recombine_to_hc_kernel(FFTZ_INT32 cpu_flags, FFTZ_INT32 dt);
+pack_rdft_ register_separate_from_hc_kernel(FFTZ_INT32 cpu_flags,
+                                            FFTZ_INT32 dt);
+pack_rdft_ register_recombine_to_hc_3d_kernel(FFTZ_INT32 cpu_flags,
+                                              FFTZ_INT32 dt);
+pack_rdft_ register_separate_from_hc_3d_kernel(FFTZ_INT32 cpu_flags,
+                                               FFTZ_INT32 dt);
 
 // Kernel function declarations for different floating point precision types
 // supported in scalar and vector compute variants
@@ -579,8 +586,10 @@ type_convert_ register_hc2c_packed_type_convert_c(FFTZ_UINT8 precision);
 
 fused_twiddle_transpose_
 register_fused_twiddle_transpose_c(FFTZ_UINT8 precision, FFTZ_UINT8 direction);
-real_pack_ register_recombine_to_hc_c(FFTZ_UINT8 precision);
-real_pack_ register_separate_from_hc_c(FFTZ_UINT8 precision);
+pack_rdft_ register_recombine_to_hc_c(FFTZ_UINT8 precision);
+pack_rdft_ register_separate_from_hc_c(FFTZ_UINT8 precision);
+pack_rdft_ register_recombine_to_hc_3d_c(FFTZ_UINT8 precision);
+pack_rdft_ register_separate_from_hc_3d_c(FFTZ_UINT8 precision);
 
 // R2HC Kernels
 kfft_ register_kernel_r2hc_rfft2c(FFTZ_UINT8 precision, FFTZ_UINT8 direction);
@@ -985,8 +994,10 @@ register_elementwise_mul_fused_norm_strided_out_avx128(FFTZ_UINT8 precision,
 fused_twiddle_transpose_
 register_fused_twiddle_transpose_avx128(FFTZ_UINT8 precision,
                                         FFTZ_UINT8 direction);
-real_pack_ register_recombine_to_hc_avx128(FFTZ_UINT8 precision);
-real_pack_ register_separate_from_hc_avx128(FFTZ_UINT8 precision);
+pack_rdft_ register_recombine_to_hc_avx128(FFTZ_UINT8 precision);
+pack_rdft_ register_separate_from_hc_avx128(FFTZ_UINT8 precision);
+pack_rdft_ register_recombine_to_hc_3d_avx128(FFTZ_UINT8 precision);
+pack_rdft_ register_separate_from_hc_3d_avx128(FFTZ_UINT8 precision);
 
 // R2HC AVX128 Kernels
 kfft_ register_kernel_r2hc_rfft2avx128(FFTZ_UINT8 precision,
@@ -1422,8 +1433,10 @@ register_elementwise_mul_fused_norm_strided_out_avx256(FFTZ_UINT8 precision,
 fused_twiddle_transpose_
 register_fused_twiddle_transpose_avx256(FFTZ_UINT8 precision,
                                         FFTZ_UINT8 direction);
-real_pack_ register_recombine_to_hc_avx256(FFTZ_UINT8 precision);
-real_pack_ register_separate_from_hc_avx256(FFTZ_UINT8 precision);
+pack_rdft_ register_recombine_to_hc_avx256(FFTZ_UINT8 precision);
+pack_rdft_ register_separate_from_hc_avx256(FFTZ_UINT8 precision);
+pack_rdft_ register_recombine_to_hc_3d_avx256(FFTZ_UINT8 precision);
+pack_rdft_ register_separate_from_hc_3d_avx256(FFTZ_UINT8 precision);
 
 // R2HC AVX256 Kernels
 kfft_ register_kernel_r2hc_rfft2avx256(FFTZ_UINT8 precision,
@@ -1859,8 +1872,10 @@ register_elementwise_mul_fused_norm_strided_out_avx512(FFTZ_UINT8 precision,
 fused_twiddle_transpose_
 register_fused_twiddle_transpose_avx512(FFTZ_UINT8 precision,
                                         FFTZ_UINT8 direction);
-real_pack_ register_recombine_to_hc_avx512(FFTZ_UINT8 precision);
-real_pack_ register_separate_from_hc_avx512(FFTZ_UINT8 precision);
+pack_rdft_ register_recombine_to_hc_avx512(FFTZ_UINT8 precision);
+pack_rdft_ register_separate_from_hc_avx512(FFTZ_UINT8 precision);
+pack_rdft_ register_recombine_to_hc_3d_avx512(FFTZ_UINT8 precision);
+pack_rdft_ register_separate_from_hc_3d_avx512(FFTZ_UINT8 precision);
 
 // R2HC AVX512 Kernels
 kfft_ register_kernel_r2hc_rfft2avx512(FFTZ_UINT8 precision,

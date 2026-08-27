@@ -4,7 +4,7 @@
 /**
  * @file separate_from_hc_avx512.c
  *
- * @brief Packed C2R separate kernel (DIF first stage).
+ * @brief Packed C2R separate kernel (DIF first stage) with AVX-512 intrinsics.
  *
  * Reconstructs the double-length child spectrum consumed by the child
  * inverse FFT, from the N/2 + 1 Hermitian input bins X (N = 2M). Per-pair
@@ -24,92 +24,97 @@
 #include "core/kernels/non_dft/real_packed/packed_rdft_avx512_common.h"
 #include "core/kernels/non_dft/real_packed/packed_rdft_common.h"
 
-static FFTZ_VOID separate_from_hc_fp32_avx512(FFTZ_VOID *cout,
-                                              const FFTZ_VOID *in,
-                                              const FFTZ_VOID *tw, FFTZ_INTP m)
+static FFTZ_VOID
+separate_from_hc_fp32_avx512(FFTZ_VOID *cout, const FFTZ_VOID *in,
+                             const FFTZ_VOID *tw,
+                             const aoclfftz_pack_rdft_t *params)
 {
+    FFTZ_INTP n0_by2 = params->n0_by2;
     FFTZ_FLOAT *p_cout = (FFTZ_FLOAT *)cout;
     const FFTZ_FLOAT *p_in = (const FFTZ_FLOAT *)in;
     const FFTZ_FLOAT *p_tw_re = (const FFTZ_FLOAT *)tw;
-    const FFTZ_FLOAT *p_tw_im = p_tw_re + 2 * (m / 2 + 1);
+    const FFTZ_FLOAT *p_tw_im = p_tw_re + 2 * (n0_by2 / 2 + 1);
 
-    p_cout[0] = p_in[0] + p_in[2 * m];
-    p_cout[1] = p_in[0] - p_in[2 * m];
+    p_cout[0] = p_in[0] + p_in[2 * n0_by2];
+    p_cout[1] = p_in[0] - p_in[2 * n0_by2];
 
-    FFTZ_INTP num_pairs = REAL_PACKED_NUM_PAIRS(m);
+    FFTZ_INTP num_pairs = REAL_PACKED_NUM_PAIRS(n0_by2);
     FFTZ_INTP remaining_pairs = num_pairs % NUM_SETS_512_S;
     FFTZ_INTP count;
     for (count = 1; count <= num_pairs - remaining_pairs;
          count += NUM_SETS_512_S)
     {
-        separate_from_hc_pair_avx512_fp32(p_cout, p_in, p_tw_re, p_tw_im, m,
-                                          count);
+        separate_from_hc_pair_avx512_fp32(p_cout, p_in, p_tw_re, p_tw_im,
+                                          n0_by2, count);
     }
     if (remaining_pairs & NUM_SETS_256_S)
     {
-        separate_from_hc_pair_avx256_fp32(p_cout, p_in, p_tw_re, p_tw_im, m,
-                                          count);
-      count += NUM_SETS_256_S;
+        separate_from_hc_pair_avx256_fp32(p_cout, p_in, p_tw_re, p_tw_im,
+                                          n0_by2, count);
+        count += NUM_SETS_256_S;
     }
     if (remaining_pairs & NUM_SETS_128_S)
     {
-        separate_from_hc_pair_avx128_fp32(p_cout, p_in, p_tw_re, p_tw_im, m,
-                                          count);
+        separate_from_hc_pair_avx128_fp32(p_cout, p_in, p_tw_re, p_tw_im,
+                                          n0_by2, count);
         count += NUM_SETS_128_S;
     }
     if (remaining_pairs & NUM_SETS_C_S)
     {
-        separate_from_hc_pair_fp32(p_cout, p_in, p_tw_re, p_tw_im, m, count);
+        separate_from_hc_pair_fp32(p_cout, p_in, p_tw_re, p_tw_im, n0_by2,
+                                   count);
     }
-    if ((m & 1) == 0)
+    if ((n0_by2 & 1) == 0)
     {
-        FFTZ_INTP middle = m / 2;
+        FFTZ_INTP middle = n0_by2 / 2;
         p_cout[2 * middle] = (FFTZ_FLOAT)2 * p_in[2 * middle];
         p_cout[2 * middle + 1] = (FFTZ_FLOAT)-2 * p_in[2 * middle + 1];
     }
 }
 
-static FFTZ_VOID separate_from_hc_fp64_avx512(FFTZ_VOID *cout,
-                                              const FFTZ_VOID *in,
-                                              const FFTZ_VOID *tw, FFTZ_INTP m)
+static FFTZ_VOID
+separate_from_hc_fp64_avx512(FFTZ_VOID *cout, const FFTZ_VOID *in,
+                             const FFTZ_VOID *tw,
+                             const aoclfftz_pack_rdft_t *params)
 {
+    FFTZ_INTP n0_by2 = params->n0_by2;
     FFTZ_DOUBLE *p_cout = (FFTZ_DOUBLE *)cout;
     const FFTZ_DOUBLE *p_in = (const FFTZ_DOUBLE *)in;
     const FFTZ_DOUBLE *p_tw_re = (const FFTZ_DOUBLE *)tw;
-    const FFTZ_DOUBLE *p_tw_im = p_tw_re + 2 * (m / 2 + 1);
+    const FFTZ_DOUBLE *p_tw_im = p_tw_re + 2 * (n0_by2 / 2 + 1);
 
-    p_cout[0] = p_in[0] + p_in[2 * m];
-    p_cout[1] = p_in[0] - p_in[2 * m];
+    p_cout[0] = p_in[0] + p_in[2 * n0_by2];
+    p_cout[1] = p_in[0] - p_in[2 * n0_by2];
 
-    FFTZ_INTP num_pairs = REAL_PACKED_NUM_PAIRS(m);
+    FFTZ_INTP num_pairs = REAL_PACKED_NUM_PAIRS(n0_by2);
     FFTZ_INTP remaining_pairs = num_pairs % NUM_SETS_512_D;
     FFTZ_INTP count;
     for (count = 1; count <= num_pairs - remaining_pairs;
          count += NUM_SETS_512_D)
     {
-        separate_from_hc_pair_avx512_fp64(p_cout, p_in, p_tw_re, p_tw_im, m,
-                                          count);
+        separate_from_hc_pair_avx512_fp64(p_cout, p_in, p_tw_re, p_tw_im,
+                                          n0_by2, count);
     }
     if (remaining_pairs & NUM_SETS_256_D)
     {
-        separate_from_hc_pair_avx256_fp64(p_cout, p_in, p_tw_re, p_tw_im, m,
-                                          count);
+        separate_from_hc_pair_avx256_fp64(p_cout, p_in, p_tw_re, p_tw_im,
+                                          n0_by2, count);
         count += NUM_SETS_256_D;
     }
     if (remaining_pairs & NUM_SETS_128_D)
     {
-        separate_from_hc_pair_avx128_fp64(p_cout, p_in, p_tw_re, p_tw_im, m,
-                                          count);
+        separate_from_hc_pair_avx128_fp64(p_cout, p_in, p_tw_re, p_tw_im,
+                                          n0_by2, count);
     }
-    if ((m & 1) == 0)
+    if ((n0_by2 & 1) == 0)
     {
-        FFTZ_INTP middle = m / 2;
+        FFTZ_INTP middle = n0_by2 / 2;
         p_cout[2 * middle] = (FFTZ_DOUBLE)2 * p_in[2 * middle];
         p_cout[2 * middle + 1] = (FFTZ_DOUBLE)-2 * p_in[2 * middle + 1];
     }
 }
 
-real_pack_ register_separate_from_hc_avx512(FFTZ_UINT8 precision)
+pack_rdft_ register_separate_from_hc_avx512(FFTZ_UINT8 precision)
 {
     if (precision == DT_FLOAT)
     {

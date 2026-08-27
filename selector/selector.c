@@ -99,6 +99,10 @@ FFTZ_INT32 register_solvers_kernels(kernel_tables_t *kernel_tables,
         register_recombine_to_hc_kernel(cpu_flags, dt);
     kernel_tables->packed_rdft.separate =
         register_separate_from_hc_kernel(cpu_flags, dt);
+    kernel_tables->packed_rdft.recombine_3d =
+        register_recombine_to_hc_3d_kernel(cpu_flags, dt);
+    kernel_tables->packed_rdft.separate_3d =
+        register_separate_from_hc_3d_kernel(cpu_flags, dt);
     if (kernel_tables->bs.ele_mul[FORWARD_FFT_DIR] == NULL ||
         kernel_tables->bs.ele_mul[BACKWARD_FFT_DIR] == NULL ||
         kernel_tables->bs.ele_mul_strided_in[FORWARD_FFT_DIR] ==
@@ -112,7 +116,9 @@ FFTZ_INT32 register_solvers_kernels(kernel_tables_t *kernel_tables,
         kernel_tables->bs.ele_mul_fused_norm_strided_out[BACKWARD_FFT_DIR] ==
             NULL ||
         kernel_tables->packed_rdft.recombine == NULL ||
-        kernel_tables->packed_rdft.separate == NULL)
+        kernel_tables->packed_rdft.separate == NULL ||
+        kernel_tables->packed_rdft.recombine_3d == NULL ||
+        kernel_tables->packed_rdft.separate_3d == NULL)
     {
         return SELECTOR_FAILURE;
     }
@@ -392,6 +398,73 @@ FFTZ_INT32 check_batched_ct_l1_direct_solvability(FFTZ_INTP n,
 // The real-packed solver drives one child CFFT over a complete transform.
 // Only used for even sized CT problems.
 // Batched problems will have several such transforms.
+//
+// Rank 1 uses the 1D recombine/separate (non-DFT) kernels.
+// Rank 3 uses the dedicated 3D grid kernel variants when the packed layout is
+// contiguous along every outer dimension. Other ranks use the regular real selector.
+static FFTZ_INT32
+is_packed_rdft_layout_contiguous(const aoclfftz_decomp_scheme_t *decomp)
+{
+    FFTZ_INTP n = decomp->dims[0].n;
+    FFTZ_INTP n0_by2 = n / 2;
+    FFTZ_UINT8 forward = (FFT_DIR(decomp->flags) == FORWARD_FFT_DIR);
+    FFTZ_UINT8 oop = IS_OUT_OF_PLACE(decomp->flags);
+    if (decomp->dims[0].in_stride != 1 || decomp->dims[0].out_stride != 1)
+    {
+        return 0;
+    }
+    if (decomp->dim_rank == 1)
+    {
+        return 1;
+    }
+
+    FFTZ_INTP exp_in_stride;
+    FFTZ_INTP exp_out_stride;
+    if (forward)
+    {
+        if (oop)
+        {
+            // Out-of-place R2C uses N real inputs and M + 1 HC outputs per row.
+            exp_in_stride = n;
+            exp_out_stride = n0_by2 + 1;
+        }
+        else
+        {
+            // In-place R2C pads the real row to alias the M + 1 HC output.
+            exp_in_stride = 2 * (n0_by2 + 1);
+            exp_out_stride = n0_by2 + 1;
+        }
+    }
+    else
+    {
+        if (oop)
+        {
+            // Out-of-place C2R expands M + 1 HC inputs into N real outputs.
+            exp_in_stride = n0_by2 + 1;
+            exp_out_stride = n;
+        }
+        else
+        {
+            // In-place C2R overwrites the HC input with a padded real output row.
+            exp_in_stride = n0_by2 + 1;
+            exp_out_stride = 2 * (n0_by2 + 1);
+        }
+    }
+
+    for (FFTZ_INT32 dim = 1; dim < decomp->dim_rank; dim++)
+    {
+        if (decomp->dims[dim].in_stride != exp_in_stride ||
+            decomp->dims[dim].out_stride != exp_out_stride ||
+            decomp->dims[dim].n <= 0)
+        {
+            return 0;
+        }
+        exp_in_stride *= decomp->dims[dim].n;
+        exp_out_stride *= decomp->dims[dim].n;
+    }
+    return 1;
+}
+
 static FFTZ_INT32 is_packed_rdft_applicable(aoclfftz_selector_t *sel,
                                             aoclfftz_realhelper_t *realhelper)
 {
@@ -403,7 +476,9 @@ static FFTZ_INT32 is_packed_rdft_applicable(aoclfftz_selector_t *sel,
     aoclfftz_decomp_scheme_t *decomp = sel->solution->decomp_scheme;
     FFTZ_INTP n = decomp->dims[0].n;
 
-    FFTZ_UINT8 is_1d_real = IS_REAL(decomp->flags) && (decomp->dim_rank == 1);
+    FFTZ_UINT8 is_supported_rank =
+        IS_REAL(decomp->flags) &&
+        (decomp->dim_rank == 1 || decomp->dim_rank == 3);
     FFTZ_UINT8 is_root_problem =
         (realhelper->problem_size == n) && (realhelper->stage == 0) &&
         realhelper->is_last_stage && !realhelper->is_buffered_invoked;
@@ -414,12 +489,18 @@ static FFTZ_INT32 is_packed_rdft_applicable(aoclfftz_selector_t *sel,
     // units stay independent via I/O strides and slot_idx.
     FFTZ_UINT8 has_single_child_thread = (decomp->thread_info->avl_threads == 1);
     FFTZ_UINT8 is_supported_size = (n > MAX_REAL_KERNEL_RADIX) && !(n & 1);
-    FFTZ_UINT8 is_unit_strided =
-        (decomp->dims[0].in_stride == 1) && (decomp->dims[0].out_stride == 1);
+    FFTZ_UINT8 has_rank_kernels = 1;
+    if (decomp->dim_rank == 3)
+    {
+        FFTZ_UINT8 forward = (FFT_DIR(decomp->flags) == FORWARD_FFT_DIR);
+        has_rank_kernels =
+            forward ? (sel->kernel_tables->packed_rdft.recombine_3d != NULL)
+                    : (sel->kernel_tables->packed_rdft.separate_3d != NULL);
+    }
 
-    return is_root_problem && is_1d_real && has_supported_batch_layout &&
+    return is_root_problem && is_supported_rank && has_supported_batch_layout &&
            is_in_order && has_single_child_thread && is_supported_size &&
-           is_unit_strided;
+           has_rank_kernels && is_packed_rdft_layout_contiguous(decomp);
 }
 
 // Fixed decision logic and CPI based selector mode execution for the
@@ -1787,16 +1868,16 @@ FFTZ_VOID fuse_vecs(aoclfftz_solution_t *sol, FFTZ_INT32 is_FFT_ker_supported)
     {
         // expected stride is the regular stride we obtain by n * stride of
         // prev dim
-        FFTZ_INTP expected_in_stride = vecs[i-1].n * vecs[i-1].in_stride;
-        FFTZ_INTP expected_out_stride = vecs[i-1].n * vecs[i-1].out_stride;
+        FFTZ_INTP exp_in_stride_stride = vecs[i-1].n * vecs[i-1].in_stride;
+        FFTZ_INTP exp_out_stride_stride = vecs[i-1].n * vecs[i-1].out_stride;
         FFTZ_INTP actual_in_stride = vecs[i].in_stride;
         FFTZ_INTP actual_out_stride = vecs[i].out_stride;
         // Do not fuse the first vector to enable memory-efficient batch
         // processing for NDim problems where the outerdimension is CT.
         // ie., problems like AxBxC that decomposes to BxCvA and A is CT,
         // its efficient if we do not fuse BxC
-        if ((expected_in_stride == actual_in_stride &&
-             expected_out_stride == actual_out_stride) &&
+        if ((exp_in_stride_stride == actual_in_stride &&
+             exp_out_stride_stride == actual_out_stride) &&
              (i != 1 || is_FFT_ker_supported ||
                         !IS_NOT_INNERMOST_DIM(sol->decomp_scheme->flags)))
         {
@@ -1955,8 +2036,8 @@ static FFTZ_INT32 setup_twiddle_packed_subproblem(aoclfftz_solution_t *sol)
 #if IN_MEMORY_TWIDDLE_FACTORS == 1
     FFTZ_UINT32 dt_prec = DT_PRECISION_FLAG(sol->decomp_scheme->flags);
     FFTZ_INTP n = sol->decomp_scheme->dims[0].n;
-    FFTZ_INTP m = n / 2;
-    FFTZ_VOID *TW = alloc_twiddle_buffer(2 * (m / 2 + 1), dt_prec);
+    FFTZ_INTP n0_by2 = n / 2;
+    FFTZ_VOID *TW = alloc_twiddle_buffer(2 * (n0_by2 / 2 + 1), dt_prec);
     if (TW == NULL)
     {
         return AOCLFFTZ_SETUP_FAILURE;
@@ -2262,13 +2343,14 @@ static FFTZ_INT32 setup_twiddle_buffer_real(aoclfftz_solution_t *solution)
  *
  * Sizing rules:
  *   - bs_buffer_size / bluestein: sum of each Bluestein node's padded, disjoint
- *     slice (active_threads_at_level * bs_buf_size); each node records its start
- *     in bs_dim_offset. Once the total size is known, the end of setup allocates
- *     the shared bs_in/bs_out pool (bs_buffer_size each), and each per-call
- *     execute_io allocates two matching regions of bs_buffer_size each.
+ *     slice (active_threads_at_level * bs_buf_size); each node records its
+ * start in bs_dim_offset. Once the total size is known, the end of setup
+ * allocates the shared bs_in/bs_out pool (bs_buffer_size each), and each
+ * per-call execute_io allocates two matching regions of bs_buffer_size each.
  *   - sr_input_copy_size: max SR input_copy_size across all SR nodes.
  *   - ct_buffer_total_size: registers the largest CT buffer size across the CT
- *     scratch owners NDIM/BUFFERED/CTL1D only one among them allocates the pool.
+ *     scratch owners NDIM/BUFFERED/CTL1D only one among them allocates the
+ * pool.
  *   - aux_buffered_pool_size: REAL_BUFFERED's padded
  *     active_threads_at_level * aux_buf_size_per_thread, plus a trailing
  *     dt_bytes to mirror the setup-time allocation. Both setup and each
@@ -2279,11 +2361,12 @@ static FFTZ_INT32 setup_twiddle_buffer_real(aoclfftz_solution_t *solution)
  *   - c2c_strides_pool_size: one MAX_REAL_KERNEL_RADIX-entry slot per thread
  *     that may run the C2C kernels of a single-threaded real Direct CT node.
  *   - transpose_aux_size: the standalone-transpose node's bitmap size
- *   - real_packed_buffer_size: padded in-place C2R expand slot times the
+ *   - real_packed_buffer_size: padded in-place C2R separate slot times the
  *     active threads at the packed node. Zero for R2C and out-of-place C2R.
  *
  * @param sol       Pointer to the root solution node of the plan tree to walk
- * @param metadata  Pointer to the execution metadata struct to populate with scratch sizes
+ * @param metadata  Pointer to the execution metadata struct to populate with
+ * scratch sizes
  */
 static FFTZ_VOID compute_exec_metadata(
                                     aoclfftz_solution_t *sol,
@@ -2452,17 +2535,19 @@ static FFTZ_VOID compute_exec_metadata(
     {
         // Batch wrappers share one packed solution template. Give every
         // concurrently active invocation a padded slot selected by slot_idx.
-        // n * dt_bytes covers the M-point double-length complex sequence that
-        // separate writes.
-        FFTZ_UINTP slot_size = GET_PADDED_SIZE(
-            (FFTZ_UINTP)sol->decomp_scheme->dims[0].n *
-            DT_SIZE(sol->decomp_scheme->flags));
-        FFTZ_UINTP pool_size =
-            (FFTZ_UINTP)sol->decomp_scheme->thread_info->active_threads *
-            slot_size;
-        if (pool_size > metadata->real_packed_buffer_size)
+        FFTZ_UINTP slot_size = (FFTZ_UINTP)SOL_DT_SIZE(sol);
+        for (FFTZ_INT32 dim = 0; dim < sol->decomp_scheme->dim_rank; dim++)
         {
-            metadata->real_packed_buffer_size = pool_size;
+            slot_size *= (FFTZ_UINTP)sol->decomp_scheme->dims[dim].n;
+        }
+        slot_size = GET_PADDED_SIZE(slot_size);
+        sol->dft_bufs->pack_rdft->scratch_slot_bytes = slot_size;
+        FFTZ_UINTP size =
+            (FFTZ_UINTP)sol->decomp_scheme->thread_info->active_threads;
+        size *= slot_size;
+        if (size > metadata->real_packed_buffer_size)
+        {
+            metadata->real_packed_buffer_size = size;
         }
     }
 
