@@ -389,48 +389,7 @@ TYPED_TEST(FftwWrapperEdgeTest,
 }
 
 /* =====================================================================
- * 11. plan_many_dft with howmany=0.
- *     AOCL-vs-FFTW divergence: FFTW's reference docs say a howmany=0 plan is
- *     still valid and executes as a no-op.  The AOCL translator instead sets
- *     the vector descriptor's length to 0, which the problem validator rejects
- *     (n <= 0), so plan creation returns NULL.  This test pins that AOCL
- *     contract (matches NTEST_PLAN_MANY_DFT_ZERO_HOWMANY in plan_gtest); the
- *     old permissive `if (p) ...` guard left the body unexecuted.
- * ===================================================================== */
-
-TYPED_TEST(FftwWrapperEdgeTest,
-           KNOWN_DIVERGENCE_MANY_DFT_HOWMANY_ZERO)
-{
-    using F = FftwTypes<TypeParam>;
-    using complex_t [[maybe_unused]] = typename F::complex_t;
-    const int N = 8;
-
-    auto *in  = F::alloc_complex(N);
-    auto *out = F::alloc_complex(N);
-
-    this->init_complex(in, N);
-
-    int n_arr[] = {N};
-    auto p = F::plan_many_dft(
-        1, n_arr, 0,
-        in, nullptr, 1, N,
-        out, nullptr, 1, N,
-        FFTW_FORWARD, FFTW_ESTIMATE);
-
-    EXPECT_EQ(p, nullptr) << "AOCL rejects howmany=0 (vecs[0].n=0 fails "
-                             "validation)";
-    if (p != nullptr)
-    {
-        F::execute(p);
-        F::destroy_plan(p);
-    }
-
-    F::free_fn(in);
-    F::free_fn(out);
-}
-
-/* =====================================================================
- * 12. plan_dft(rank=1) vs plan_dft_1d: identical code paths.
+ * 11. plan_dft(rank=1) vs plan_dft_1d: identical code paths.
  *     Should produce bit-identical results.
  * ===================================================================== */
 

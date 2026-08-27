@@ -72,6 +72,7 @@ typedef enum
     SOLVER_REAL_MT_DIRECT_CT_R2C,
     SOLVER_REAL_MT_DIRECT_CT_C2R,
     SOLVER_REAL_MT_BATCHED,
+    SOLVER_NOP,
     NUM_SOLVERS_END
 } aoclfftz_solver_type;
 
@@ -265,6 +266,7 @@ FFTZ_INT32 setup_real_mt_batched_solver(aoclfftz_solution_t *sol,
                                    FFTZ_UINT8 *has_nested);
 #endif
 
+dft_solver_ register_execute_nop_solver(FFTZ_VOID);
 dft_solver_ register_execute_direct_solver(FFTZ_VOID);
 dft_solver_ register_execute_direct_batched_colmajor_solver(FFTZ_VOID);
 dft_solver_ register_execute_ct_solver(FFTZ_VOID);

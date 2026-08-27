@@ -226,12 +226,17 @@ TYPED_TEST_P(AoclfftzAPITest, NTEST_VECS_STRIDES)
     {
         if (this->problem->vecs != NULL)
         {
-            this->problem->vecs->n = dist_invalid(prng);
+            this->problem->vecs->n = dist_negative(prng);
             this->problem->vecs->in_stride = dist_invalid(prng);
             this->problem->vecs->out_stride = dist_invalid(prng);
             this->run_setup_and_validate(INVALID);
         }
     }
+}
+
+TYPED_TEST_P(AoclfftzAPITest, PTEST_VECS_ZERO_SIZE)
+{
+    this->validate_zero_batch_is_nop();
 }
 
 // Execute API test cases
@@ -654,6 +659,7 @@ REGISTER_TYPED_TEST_SUITE_P(
     NTEST_VECS,
     NTEST_DIMS_STRIDES,
     NTEST_VECS_STRIDES,
+    PTEST_VECS_ZERO_SIZE,
     PTEST_EXECUTE_VALIDHANDLE,
     PTEST_EXECUTE_IO_VALIDHANDLE_FORWARD,
     PTEST_EXECUTE_IO_VALIDHANDLE_BACKWARD,

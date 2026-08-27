@@ -1290,6 +1290,19 @@ static FFTZ_VOID compute_exec_metadata(aoclfftz_solution_t *sol,
 static FFTZ_INT32 setup_chirp_fft(aoclfftz_solution_t *sol,
                                   aoclfftz_mutable_ctx_t *ctx);
 
+static inline FFTZ_UINT8
+is_nop_solvable(const aoclfftz_decomp_scheme_t *decomp_scheme)
+{
+    for (FFTZ_INT32 i = 0; i < decomp_scheme->vec_rank; i++)
+    {
+        if (decomp_scheme->vecs[i].n == 0)
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static inline FFTZ_INT32 prepare_and_setup_dft(aoclfftz_selector_t *sel_obj)
 {
     FFTZ_INT32 ret;
@@ -1307,7 +1320,11 @@ static inline FFTZ_INT32 prepare_and_setup_dft(aoclfftz_selector_t *sel_obj)
     cap_plan_thread_budget(sel_obj->solution->decomp_scheme);
 #endif
 
-    if (IS_REAL(sel_obj->solution->decomp_scheme->flags))
+    if (is_nop_solvable(sel_obj->solution->decomp_scheme))
+    {
+        ret = selector_nop_dft(sel_obj);
+    }
+    else if (IS_REAL(sel_obj->solution->decomp_scheme->flags))
     {
         aoclfftz_realhelper_t *realhelper;
         ALLOC_ALIGN_UNINIT(realhelper, aoclfftz_realhelper_t,

@@ -26,6 +26,9 @@ dft_solver_ solvers_table[NUM_SOLVERS_END] = { 0x0, };
 // concurrent setup calls benign even though they technically race.
 FFTZ_INT32 register_solvers(FFTZ_VOID)
 {
+    // Shared solvers
+    solvers_table[SOLVER_NOP] = register_execute_nop_solver();
+
     // Real solvers
     solvers_table[SOLVER_REAL_DIRECT_R2C] =
         register_execute_real_direct_r2c();

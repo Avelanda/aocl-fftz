@@ -61,8 +61,9 @@ Member-by-Member Guide
 
 - **Constraints for each element**:
 
-  - ``n`` (size): Must be > 0.
-  - ``in_stride``, ``out_stride``: Must be > 0.
+  - ``dims`` - ``n`` (size), ``in_stride`` and ``out_stride``: Must be > 0.
+  - ``vecs`` - ``in_stride`` and ``out_stride``: Must be > 0.
+  - ``vecs`` - ``n`` (batch size): Must be :math:`\geq 0`. A batch size of 0 is treated as a no-op. Negative values are rejected.
   - For in-place transforms, ``in_stride`` must equal ``out_stride`` for each dimension.
   - For real transforms (R2C/C2R), special stride rules must be followed (see :ref:`Stride Setting <stride-setting>`).
 
@@ -101,7 +102,7 @@ Before calling setup function, :ref:`aoclfftz_setup_f <aoclfftz_setup_f>` in thi
 
 - All pointers (``in``, ``out``, ``dims``, ``vecs``) are non-NULL.
 - All ranks (``vec_rank``, ``dim_rank``) are :math:`\geq 1`.
-- All dimension sizes and strides are > 0.
+- All ``dims`` sizes and strides are > 0, all ``vecs`` strides are > 0, and all ``vecs`` batch sizes are non-negative.
 - Stride rules for in-place/out-of-place and real/complex transforms are satisfied.
 - Flags are set to supported values.
 - Parallel and control parameters are within valid ranges.

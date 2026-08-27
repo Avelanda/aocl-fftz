@@ -590,7 +590,7 @@ TYPED_TEST(FftwWrapperPlanTest, NTEST_PLAN_MANY_DFT_NULL_INPUT)
 }
 
 TYPED_TEST(FftwWrapperPlanTest,
-           KNOWN_DIVERGENCE_PLAN_MANY_DFT_ZERO_HOWMANY)
+           PTEST_PLAN_MANY_DFT_ZERO_HOWMANY)
 {
     using F = FftwTypes<TypeParam>;
     int n[] = {8};
@@ -598,7 +598,7 @@ TYPED_TEST(FftwWrapperPlanTest,
     auto *out = F::alloc_complex(8);
     auto p = F::plan_many_dft(1, n, 0, in, nullptr, 1, 8,
                               out, nullptr, 1, 8, FFTW_FORWARD, FFTW_ESTIMATE);
-    EXPECT_EQ(p, nullptr);
+    EXPECT_NE(p, nullptr);
     if (p)
     {
         F::destroy_plan(p);

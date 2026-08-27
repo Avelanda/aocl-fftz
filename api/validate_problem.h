@@ -253,9 +253,9 @@ static inline FFTZ_INT32 validate_flags(aoclfftz_flags_t *flags)
     }                                                                          \
     for (FFTZ_INT32 i = 0; i < vec_rank; i++) \
     {                                                                          \
-        if (vecs[i].n <= 0)                                                    \
+        if (vecs[i].n < 0)                                                     \
         {                                                                      \
-            AOCLFFTZ_ERROR("Vector[%d]: size must be at least 1", i);          \
+            AOCLFFTZ_ERROR("Vector[%d]: size cannot be negative", i);          \
             errno = AOCLFFTZ_INVALID_INPUT;                                    \
             goto validation_exit;                                              \
         }                                                                      \

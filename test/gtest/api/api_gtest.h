@@ -53,11 +53,12 @@ const std::vector<aoclfftz_flags_t> unsupported_flags = {
 
 const std::vector<FFTZ_INT32> unsupported_rank = { INT32_MIN, -1 };
 
-// Random number generator setup for generating invalid test values
+// dist_invalid: zero/negative strides; dist_negative: negative vec size only.
 #define INIT_RANDOM_NUM_GEN() \
     std::random_device rd; \
     std::mt19937 prng(rd()); \
     std::uniform_int_distribution<> dist_invalid(INT32_MIN, 0); \
+    std::uniform_int_distribution<> dist_negative(INT32_MIN, -1); \
     prng.seed(42);
 
 // Function to check if the handle is destroyed
@@ -519,6 +520,32 @@ public:
         in = NULL;
         free(out);
         out = NULL;
+    }
+
+    FFTZ_VOID validate_zero_batch_is_nop()
+    {
+        using DataType = std::remove_pointer_t<decltype(problem->in)>;
+        cleanup_problem();
+        create_default_custom_pdesc({64}, 1, true, false);
+        problem->vecs[0].n = 0;
+
+        const DataType sentinel = static_cast<DataType>(-999.0);
+        std::fill(problem->out, problem->out + output_size / sizeof(DataType),
+                  sentinel);
+
+        handle = aoclfftz_setup(problem);
+        ASSERT_NE(handle, nullptr);
+        EXPECT_EQ(aoclfftz_execute(handle), AOCLFFTZ_SUCCESS);
+        EXPECT_EQ(aoclfftz_execute_io(handle, problem->in, problem->out),
+                  AOCLFFTZ_SUCCESS);
+
+        for (FFTZ_UINTP i = 0; i < output_size / sizeof(DataType); i++)
+        {
+            ASSERT_EQ(problem->out[i], sentinel);
+        }
+
+        aoclfftz_destroy(handle);
+        handle = nullptr;
     }
 
     // Tests aoclfftz_execute_io after freeing original buffers and passing new

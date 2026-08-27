@@ -272,6 +272,7 @@ FFTZ_INT32 selector_ndim_dft(aoclfftz_selector_t *sel, kernel_t *kertab);
 FFTZ_INT32 selector_bluestein_dft(aoclfftz_selector_t *sel, kernel_t *kertab);
 FFTZ_INT32 selector_buffered_dft(aoclfftz_selector_t *sel, kernel_t *kertab);
 FFTZ_INT32 selector_permuted_dft(aoclfftz_selector_t *sel, kernel_t *kertab);
+FFTZ_INT32 selector_nop_dft(aoclfftz_selector_t *sel);
 FFTZ_INT32 selector_direct_dft(aoclfftz_selector_t *sel, kernel_t *kertab);
 FFTZ_INT32 selector_ct_dft(aoclfftz_selector_t *sel, kernel_t *kertab);
 FFTZ_INT32 selector_batched_ct_l1_direct_dft(aoclfftz_selector_t *sel);
