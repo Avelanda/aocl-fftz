@@ -23,7 +23,7 @@ extern FFTZ_INT32 thread_num;
 #define INIT_PTHR_FFT(pthr_fft)                                                \
     {                                                                          \
         pthr_fft.num_threads = thread_num;                                     \
-        pthr_fft.dynamic_load_model = 0;                                       \
+        pthr_fft.dynamic_load_model = 1;                                       \
     }
 
 #define INIT_CNTRL_PARAMS(cntrl_params)                                        \

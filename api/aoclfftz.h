@@ -130,7 +130,7 @@ typedef struct aoclfftz_smp_pfft
     /** Specifies the model for determining the number of threads.
      * - 0: Use `num_threads` as the maximum number of threads.
      * - 1: Dynamically determine the number of threads which can
-     *      be less than or equal to `num_threads`. */
+     *      be less than or equal to `num_threads` (default). */
     FFTZ_UINT32 dynamic_load_model;
 } aoclfftz_smp_pfft_t;
 
