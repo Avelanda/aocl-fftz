@@ -117,10 +117,8 @@ Use the following additional options to configure your build:
      - Enables compiler flags to treat all warnings as errors (Enabled by default)
    * - FUZZTEST
      - Enables Compilation of fuzz test with fuzzing mode. Supported only on Linux Debug build with Clang compiler (Disabled by default)
-   * - UBSAN
-     - Enables undefined behavior sanitizer checks. Supported only on Linux builds. Compatible with ASAN (Disabled by default)
    * - VALGRIND
-     - Enables memory checks using Valgrind. Supported only on Linux Debug build. Incompatible with ASAN=ON or UBSAN=ON (Disabled by default)
+     - Enables memory checks using Valgrind. Supported only on Linux Debug build. Incompatible with ASAN=ON (Disabled by default)
    * - OpenMP_libomp_LIBRARY
      - Path to the custom OpenMP library (System OpenMP is used if not provided)
 
@@ -304,8 +302,8 @@ Running Valgrind and sanitizer checks using CTest
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To perform memory checks using Valgrind or ASAN, enable the relevant build options on Linux while configuring CMake.
-``VALGRIND``, ``ASAN`` and ``UBSAN`` are supported only on Linux.
-Please note that ``VALGRIND`` requires ``-DCMAKE_BUILD_TYPE=Debug`` and cannot be combined with ``ASAN`` or ``UBSAN``.
+``VALGRIND`` and ``ASAN`` are supported only on Linux.
+Please note that ``VALGRIND`` requires ``-DCMAKE_BUILD_TYPE=Debug`` and cannot be combined with ``ASAN``.
 
 Sample commands for Valgrind:
 
@@ -327,16 +325,6 @@ Sample commands for ASAN:
 
     # Run
     ctest
-
-
-ASAN and UBSAN can be combined in a single build:
-
-.. code-block:: bash
-
-    cmake -B <build directory> <CMakeLists.txt directory> \
-      -DASAN=ON -DUBSAN=ON -DBUILD_THIRD_PARTY_WRAPPERS=ON
-    cmake --build <build directory> --parallel
-    ctest --test-dir <build directory> --output-on-failure -R "^FftwWrapper"
 
 
 Generating Documentation

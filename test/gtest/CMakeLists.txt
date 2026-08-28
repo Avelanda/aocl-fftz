@@ -98,13 +98,6 @@ if(ASAN)
     target_compile_options(${gtest_lib_name} PUBLIC -fsanitize=address -O0 -gdwarf-5 -g3)
     target_link_options(${gtest_lib_name} PUBLIC -fsanitize=address)
 endif()
-if(UBSAN)
-    target_compile_options(${gtest_lib_name} PUBLIC
-        -fsanitize=undefined -fno-sanitize-recover=undefined
-        -fno-omit-frame-pointer -O1 -g3)
-    target_link_options(${gtest_lib_name} PUBLIC
-        -fsanitize=undefined -fno-sanitize-recover=undefined)
-endif()
 
 # Build FFTW wrapper as a test-local static library so fftw_wrapper tests
 # can link against it regardless of add_subdirectory ordering in the parent.
@@ -137,23 +130,16 @@ if(BUILD_THIRD_PARTY_WRAPPERS)
         target_compile_options(fftw3_gtest PUBLIC -fsanitize=address -O0 -gdwarf-5 -g3)
         target_link_options(fftw3_gtest PUBLIC -fsanitize=address)
     endif()
-    if(UBSAN)
-        target_compile_options(fftw3_gtest PUBLIC
-            -fsanitize=undefined -fno-sanitize-recover=undefined
-            -fno-omit-frame-pointer -O1 -g3)
-        target_link_options(fftw3_gtest PUBLIC
-            -fsanitize=undefined -fno-sanitize-recover=undefined)
-    endif()
 endif()
 
 file(GLOB GTEST_SRC_FILES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/${GTEST_DIR}/*/*.cpp)
 
 # gtest_discover_tests uses POST_BUILD discovery with a 5 s timeout by default.
-# Sanitizer builds (ASAN/UBSAN, or FUZZTEST via FUZZ_FLAGS) are slower to
-# enumerate and can hit that limit under CI load, so use PRE_TEST and 60 s.
+# Sanitizer builds (ASAN or FUZZTEST via FUZZ_FLAGS) are slower to enumerate
+# and can hit that limit under CI load, so use PRE_TEST and 60 s.
 set(GTEST_DISCOVERY_MODE POST_BUILD)
 set(GTEST_DISCOVERY_TIMEOUT 5)
-if(ASAN OR UBSAN OR FUZZTEST)
+if(ASAN OR FUZZTEST)
     set(GTEST_DISCOVERY_MODE PRE_TEST)
     set(GTEST_DISCOVERY_TIMEOUT 60)
 endif()

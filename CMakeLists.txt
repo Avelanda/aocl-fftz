@@ -46,7 +46,6 @@ set(AOCL_TEST_COVERAGE "OFF" CACHE STRING "Enables GTest and AOCL test bench bas
 set_property(CACHE AOCL_TEST_COVERAGE PROPERTY STRINGS "OFF" "STANDARD" "EXHAUSTIVE")
 option(ACCURACY_WITH_DFT "Enables accuracy mode to run with DFT (Disabled by default)" OFF)
 option(ASAN "Enables address sanitizer checks. Supported only on Linux (Disabled by default)" OFF)
-option(UBSAN "Enables undefined-behavior sanitizer checks. Supported only on Linux (Disabled by default)" OFF)
 option(BUILD_DOC "Builds documentation for library (Disabled by default)" OFF)
 option(BUILD_STATIC_LIBS "Builds static library (Default build type is shared library)" OFF)
 option(BUILD_THIRD_PARTY_WRAPPERS "Builds fftz third party wrapper libraries along aocl_fftz library" OFF)
@@ -61,7 +60,7 @@ option(ENABLE_STRICT_WARNINGS "Enables compiler flags to treat all warnings as e
 option(FUZZTEST "Enables Compilation of fuzz test with fuzzing mode. Supported only on Linux Debug build with Clang compiler (Disabled by default)" OFF)
 set(SELECT_REAL_FFT_EXECUTION_ORDER "TRUE_RECURSION" CACHE STRING "Real FFT CT execution order: ITERATIVE (legacy Direct-first with SWAP), PARTIAL_RECURSION (recursive CT-first tree with Direct tail-chaining), TRUE_RECURSION (CT-orchestrated recurse-then-combine mirroring Complex FFT; default)")
 set_property(CACHE SELECT_REAL_FFT_EXECUTION_ORDER PROPERTY STRINGS "ITERATIVE" "PARTIAL_RECURSION" "TRUE_RECURSION")
-option(VALGRIND "Enables memory checks using Valgrind. Supported only on Linux Debug build. Incompatible with ASAN=ON or UBSAN=ON (Disabled by default)" OFF)
+option(VALGRIND "Enables memory checks using Valgrind. Supported only on Linux Debug build. Incompatible with ASAN=ON (Disabled by default)" OFF)
 if(WIN32)
     set(OpenMP_libomp_LIBRARY "C:/Program Files/LLVM/lib/libomp.lib" CACHE FILEPATH "Path to the custom OpenMP library")
 else()
@@ -374,17 +373,10 @@ if(ASAN)
     endif()
 endif()
 
-if(UBSAN)
-    if(NOT (${CMAKE_SYSTEM_NAME} MATCHES "Linux"))
-        set(UBSAN OFF)
-        message(WARNING "Target not supported. UBSAN is only supported on Linux builds.")
-    endif()
-endif()
-
 # setup to run memory check using Valgrind
 if(VALGRIND)
     if((NOT (${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND CMAKE_BUILD_TYPE MATCHES "Debug"))
-       OR ASAN OR UBSAN)
+       OR ASAN)
         set(VALGRIND OFF)
         message(WARNING "Target not supported. VALGRIND is only supported with Linux/Debug build and is incompatible with sanitizers")
     endif()
@@ -400,14 +392,13 @@ if(FUZZTEST)
 endif()
 
 # Sanitizer, memory-check, coverage, and fuzz configurations are test builds.
-if((ASAN OR UBSAN OR VALGRIND OR CODE_COVERAGE
+if((ASAN OR VALGRIND OR CODE_COVERAGE
     OR CODE_COVERAGE_FOR_ATG OR FUZZTEST)
    AND (AOCL_TEST_COVERAGE STREQUAL "OFF"))
     set(AOCL_TEST_COVERAGE "STANDARD")
 endif()
 
 message(STATUS ASAN : ${ASAN})
-message(STATUS UBSAN : ${UBSAN})
 message(STATUS VALGRIND : ${VALGRIND})
 message(STATUS CODE COVERAGE : ${CODE_COVERAGE})
 message(STATUS CODE COVERAGE ATG : ${CODE_COVERAGE_FOR_ATG})
@@ -585,21 +576,11 @@ if(CODE_COVERAGE OR CODE_COVERAGE_FOR_ATG)
     target_link_options(${lib_name} PUBLIC --coverage)
 endif()
 
-# add compiler and linker flags for sanitizers (ASAN, UBSAN)
+# add compiler and linker flags for AddressSanitizer
 if(ASAN)
     target_compile_options(fftz_objects PUBLIC -fsanitize=address -O0 -gdwarf-5 -g3)
     target_link_options(fftz_objects INTERFACE -fsanitize=address)
     target_link_options(${lib_name} PUBLIC -fsanitize=address)
-endif()
-
-if(UBSAN)
-    target_compile_options(fftz_objects PUBLIC
-        -fsanitize=undefined -fno-sanitize-recover=undefined
-        -fno-omit-frame-pointer -O1 -g3)
-    target_link_options(fftz_objects INTERFACE
-        -fsanitize=undefined -fno-sanitize-recover=undefined)
-    target_link_options(${lib_name} PUBLIC
-        -fsanitize=undefined -fno-sanitize-recover=undefined)
 endif()
 
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
