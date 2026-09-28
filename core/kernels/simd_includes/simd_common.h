@@ -1048,13 +1048,13 @@
  */
 union data_union_128
 {
-    unsigned u[4];
+    FFTZ_UINT32 u[4];
     __m128 s;
     __m128d d;
 };
 union data_union_256
 {
-    unsigned u[8];
+    FFTZ_UINT32 u[8];
     __m256 s;
     __m256d d;
 };

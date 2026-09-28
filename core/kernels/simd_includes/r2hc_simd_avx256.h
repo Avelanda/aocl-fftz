@@ -339,7 +339,7 @@
  */
 union zero_negate_256
 {
-    unsigned u[8];
+    FFTZ_UINT32 u[8];
     __m256 s;
     __m256d d;
 };

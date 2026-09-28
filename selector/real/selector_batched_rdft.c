@@ -19,7 +19,7 @@
 #endif
 
 FFTZ_INT32 selector_batched_rdft(aoclfftz_selector_t *sel, kernel_t *kertab,
-                            aoclfftz_realhelper_t *realhelper)
+                                 aoclfftz_realhelper_t *realhelper)
 {
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Enter");
 
@@ -115,6 +115,26 @@ FFTZ_INT32 selector_batched_rdft(aoclfftz_selector_t *sel, kernel_t *kertab,
         AOCLFFTZ_ERROR("Failed to select a proper solution for a single real "
                        "FFT batch");
         goto exit_batched_dft;
+    }
+
+    // The packed Bluestein worker derives its CT vector strides during child
+    // selection. Its Batched parent owns pointer advancement, so copy those
+    // final strides back to the wrapper and convert the half-complex side from
+    // real-point units to interleaved complex units.
+    if (IS_BLUESTEIN_CT_STAGE(sel->solution->decomp_scheme->flags))
+    {
+        sel->solution->decomp_scheme->vecs[0].in_stride =
+            cur_sel->solution->decomp_scheme->vecs[0].in_stride;
+        sel->solution->decomp_scheme->vecs[0].out_stride =
+            cur_sel->solution->decomp_scheme->vecs[0].out_stride;
+        if (FFT_DIR(sel->solution->decomp_scheme->flags) == FORWARD_FFT_DIR)
+        {
+            sel->solution->decomp_scheme->vecs[0].out_stride *= DATA_STRIDE;
+        }
+        else
+        {
+            sel->solution->decomp_scheme->vecs[0].in_stride *= DATA_STRIDE;
+        }
     }
 
     // Calculate the batch size of all the sub-problems in the vector problem

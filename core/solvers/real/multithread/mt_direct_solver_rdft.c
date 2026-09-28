@@ -60,6 +60,11 @@ FFTZ_INT32 setup_real_mt_direct_solver(aoclfftz_solution_t *sol,
         *has_nested = 1;
     }
 
+    // Only a packed Bluestein child overrides the stride batch (its Batched
+    // parent stashes the group count here). A Direct stage always strides by
+    // its own vecs[0].n, so clear any value a preceding packed stage left.
+    realhelper->packed_group_count = 0;
+
     status = allocate_and_setup_stride(sol, *realhelper);
     if (status != SOLVER_SUCCESS)
     {

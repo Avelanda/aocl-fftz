@@ -52,18 +52,19 @@ zero_rdft_dc_and_nyquist_fp64(FFTZ_DOUBLE *out, FFTZ_INTP nyquist_im_offset)
 }
 
 /**
- * @brief Resolve a node's I/O pointers from its roles and the per-call ctx. A SWAP
- * input reads aux_pool_base_1, a SWAP output writes aux_pool_base_2, and each
- * stage swaps the two so its output feeds the next stage.
+ * @brief Resolve a node's I/O pointers from its roles and the per-call ctx.
+ * A SWAP input reads aux_pool_base_2, a SWAP output writes aux_pool_base_1;
+ * the pools are swapped elsewhere (execute_ct_intra_stage_kernels) so a stage's
+ * output feeds the next stage.
  */
 static inline FFTZ_VOID aoclfftz_resolve_real_io(
     const aoclfftz_mutable_ctx_t *ctx, FFTZ_UINT8 in_role, FFTZ_UINT8 out_role,
     FFTZ_VOID **in_real, FFTZ_VOID **out_real)
 {
     *in_real  = (in_role == REAL_USE_AUX_AND_SWAP) ?
-                ctx->aux_pool_base_1 : ctx->in_real;
+                ctx->aux_pool_base_2 : ctx->in_real;
     *out_real = (out_role == REAL_USE_AUX_AND_SWAP) ?
-                ctx->aux_pool_base_2 : ctx->out_real;
+                ctx->aux_pool_base_1 : ctx->out_real;
 }
 
 /**
@@ -376,6 +377,17 @@ FFTZ_VOID real_mt_c2c_thread_stride_slot(FFTZ_VOID *stride_slab,
 #endif
 FFTZ_INT32 allocate_and_setup_stride(aoclfftz_solution_t *sol,
                                aoclfftz_realhelper_t realhelper);
+/**
+ * @brief Stores a CT stage's strides on the node itself.
+ *
+ * A Direct stage keeps these in the stride arrays that
+ * allocate_and_setup_stride builds for its kernels. A stage that has no
+ * kernels, and so no stride arrays (a Bluestein standing in for a Direct),
+ * reads dims[0] and vecs[0] instead and needs the same values written there.
+ * Both go through set_ct_base_strides so the two cannot drift apart.
+ */
+FFTZ_VOID set_ct_stage_strides(aoclfftz_solution_t *sol,
+                               aoclfftz_realhelper_t *realhelper);
 FFTZ_VOID update_ct_buffers(aoclfftz_solution_t *sol,
                        aoclfftz_realhelper_t *realhelper);
 FFTZ_VOID compute_cost(aoclfftz_solution_t *sol, cost_analysis_t *cost,

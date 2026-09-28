@@ -11,8 +11,10 @@
  *  @author Jeevanantham N
  */
 
+#include "core/common/bluestein_utils.h"
 #include "core/common/memory_manager.h"
 #include "core/kernels/kernel.h"
+#include "core/solvers/solver.h"
 #include "utils/utils.h"
 
 /**
@@ -29,8 +31,8 @@
  * @param[out] size       Element count owned by tid (0 if none).
  */
 static inline FFTZ_VOID thread_elem_range(FFTZ_INT32 tid, FFTZ_INTP n,
-                                          FFTZ_INT32 n_threads, FFTZ_INTP *start,
-                                          FFTZ_INTP *size)
+                                          FFTZ_INT32 n_threads,
+                                          FFTZ_INTP *start, FFTZ_INTP *size)
 {
     FFTZ_INTP elems_per_thread = n / n_threads;
     FFTZ_INTP extra_elems = n % n_threads;
@@ -48,8 +50,10 @@ static inline FFTZ_VOID thread_elem_range(FFTZ_INT32 tid, FFTZ_INTP n,
  * @param[in]  a          First operand buffer.
  * @param[in]  b          Second operand buffer.
  * @param[in]  n          Number of complex elements to process.
- * @param[in]  start_idx  Logical element index offset (used by strided variants).
- * @param[in]  stride     Stride in complex elements (used by strided variants).
+ * @param[in]  start_idx  Logical element index offset (used by strided
+ *                        variants).
+ * @param[in]  stride     Stride in complex elements (used by strided
+ *                        variants).
  * @param[in]  n_threads  Number of OpenMP workers to dispatch.
  * @param[in]  elem_bytes Byte stride per complex element
  *                        (DATA_STRIDE * dt_bytes).
@@ -86,7 +90,7 @@ static inline FFTZ_VOID mt_ele_mul_dispatch(elementwise_mul_ kernel,
  * gets a contiguous slice of @p out and @p b; @p a stays at the caller base
  * and the thread's element start index is passed into the strided-in kernel.
  *
- * @param[in]  kernel     Elementwise multiplication kernel 
+ * @param[in]  kernel     Elementwise multiplication kernel
  *                        (strided-in variant).
  * @param[out] out        Destination buffer (out = a .* b), chunked by thread.
  * @param[in]  a          Strided first operand, shared base across all
@@ -189,18 +193,22 @@ mt_post_mul_dispatch(elementwise_mul_fused_norm_ kernel, FFTZ_VOID *out,
  * @brief Sets up the MT Bluestein solver with extended length buffers.
  *
  * Initializes the next solution object with extended length m, allocates
- * the internal buffers (B and B_out), and snapshots avl_threads into
+ * the internal buffers (B and B_out), binds the Bluestein step kernels,
+ * precomputes the chirp sequence into B, and snapshots avl_threads into
  * thread_info->n_threads as the per-invocation kernel thread budget for
  * ele_mul dispatch.
  *
- * @param[in,out] sol      Current solution object
- * @param[out]    next_sol Next solution to configure
- * @param[in]     m        Extended length (must be >= 2*n-1 and factorable)
+ * @param[in,out] sol        Current solution object
+ * @param[out]    next_sol   Next solution to configure
+ * @param[in]     m          Extended length (must be >= 2*n-1 and factorable)
+ * @param[in]     kt         Kernel tables for binding Bluestein step kernels
+ * @param[out]    has_nested Set to 1 when nested under another MT level
  * @return FFTZ_INT32 SOLVER_SUCCESS on success, error code on failure
  */
 FFTZ_INT32 setup_mt_bluestein_solver(aoclfftz_solution_t *sol,
-                                aoclfftz_solution_t *next_sol, FFTZ_INTP m,
-                                FFTZ_UINT8 *has_nested)
+                                     aoclfftz_solution_t *next_sol, FFTZ_INTP m,
+                                     kernel_tables_t *kt,
+                                     FFTZ_UINT8 *has_nested)
 {
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Enter");
 
@@ -232,6 +240,15 @@ FFTZ_INT32 setup_mt_bluestein_solver(aoclfftz_solution_t *sol,
         return ret;
     }
 
+    bind_bluestein_mul_kernels(sol, kt);
+
+    // Precompute chirp sequence into B once at plan time; execute reuses it.
+    ret = compute_chirp_sequence(sol, m);
+    if (ret != BLUESTEIN_SUCCESS)
+    {
+        return ret;
+    }
+
     // Snapshot avl_threads as the per-invocation kernel thread budget.
     sol->decomp_scheme->thread_info->n_threads =
         sol->decomp_scheme->thread_info->avl_threads;
@@ -256,8 +273,9 @@ FFTZ_INT32 setup_mt_bluestein_solver(aoclfftz_solution_t *sol,
  * 5. Perform inverse FFT
  * 6. Post-process: fused normalize + chirp multiply with B
  *
- * The pre_mul, mul, and post_mul steps are chunked across thread_info->n_threads via
- * the mt_*_dispatch helpers; the inner FFT(m) subtree threads independently.
+ * The pre_mul, mul, and post_mul steps are chunked across
+ * thread_info->n_threads via the mt_*_dispatch helpers; the inner FFT(m)
+ * subtree threads independently.
  *
  * @param[in,out] sol Solution object containing problem configuration
  * @param[in,out] ctx Per-call execution context
@@ -282,8 +300,8 @@ static FFTZ_INT32 execute_mt_bluestein_solver(aoclfftz_solution_t *sol,
     // ct_offset anyway to avoid invalid values downstream.
     bs_ctx.ct_offset = 0;
 
-    // Two-level split of the shared bs pool: bs_dim_offset selects this dim's slice,
-    // then bs_buf_size * slot_idx picks this thread's slot within it.
+    // Two-level split of the shared bs pool: bs_dim_offset selects this dim's
+    // slice, then bs_buf_size * slot_idx picks this thread's slot within it.
     FFTZ_INTP bs_buf_offset = bluestein->bs_dim_offset +
                               bluestein->bs_buf_size * ctx->slot_idx;
 
@@ -315,9 +333,9 @@ static FFTZ_INT32 execute_mt_bluestein_solver(aoclfftz_solution_t *sol,
     //=========================================================================
     // Step 1: Gather input and apply chirp pre-processing
     //=========================================================================
-    mt_pre_mul_dispatch(bluestein->pre_mul[dir], bs_in_real, cur_in, bluestein->B,
-                        n, sol->decomp_scheme->dims[0].in_stride, n_threads,
-                        elem_bytes);
+    mt_pre_mul_dispatch(bluestein->pre_mul[dir], bs_in_real, cur_in,
+                        bluestein->B, n, sol->decomp_scheme->dims[0].in_stride,
+                        n_threads, elem_bytes);
 
     // Zero-pad the input from index n to m-1
     memset(MOVE_ADDR(bs_in_real, n * elem_bytes), 0, (m - n) * elem_bytes);

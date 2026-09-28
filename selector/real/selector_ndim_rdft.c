@@ -87,7 +87,7 @@ FFTZ_INT32 selector_ndim_rdft(aoclfftz_selector_t *sel, kernel_t *kertab,
         // capture stats
     }
     sel->solution->next_sol = real_dim_sol->solution;
-    sel->solution->dft_bufs->nd_sol = complex_dims_sol->solution;
+    sel->solution->dft_bufs->complex_sol = complex_dims_sol->solution;
 
     destroy_selector_without_solution(real_dim_sol);
     destroy_selector_without_solution(complex_dims_sol);

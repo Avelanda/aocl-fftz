@@ -167,6 +167,14 @@ FFTZ_INT32 selector_ct_dft(aoclfftz_selector_t *sel, kernel_t *kertab)
             radix_m_sol->decomp_scheme->vecs[0].out_stride;
         radix_r_sol->decomp_scheme->vecs[0].in_stride =
             radix_m_sol->decomp_scheme->dims[0].out_stride;
+        // Radix-m packs the batch when it writes into scratch, so read it back
+        // at whatever spacing radix-m settled on.
+        if (radix_r_sol->decomp_scheme->batched_vecs != NULL &&
+            radix_m_sol->decomp_scheme->batched_vecs != NULL)
+        {
+            radix_r_sol->decomp_scheme->batched_vecs[0].in_stride =
+                radix_m_sol->decomp_scheme->batched_vecs[0].out_stride;
+        }
 
         ret = selector_direct_dft(cur_sel, kertab);
         if (ret != SELECTOR_SUCCESS)

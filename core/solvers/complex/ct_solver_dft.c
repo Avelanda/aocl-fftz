@@ -29,10 +29,13 @@ FFTZ_INT32 setup_ct_solver(aoclfftz_solution_t *sol, aoclfftz_solution_t *sol_r,
         AOCLFFTZ_ERROR("copy_solution_obj failed: %s", get_status_string(ret));
         return ret;
     }
-    // Set buffered flag for radix-m sub-problem if the original problem is
-    // in-place.
-    if (sol->decomp_scheme->in_real != NULL &&
-        sol->decomp_scheme->in_real == sol->decomp_scheme->out_real)
+    // Set buffered for an in-place parent. A non-innermost ND child also needs
+    // it: ndim_solver runs the inner dimensions first, then uses their output
+    // as both input and output for the outer child. That child therefore runs
+    // in-place even when the ND parent itself is out-of-place.
+    if ((sol->decomp_scheme->in_real != NULL &&
+         sol->decomp_scheme->in_real == sol->decomp_scheme->out_real) ||
+        IS_NOT_INNERMOST_DIM(sol->decomp_scheme->flags))
     {
         SET_BUFFERED(sol_m->decomp_scheme->flags);
     }

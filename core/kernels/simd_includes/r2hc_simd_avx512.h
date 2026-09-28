@@ -541,7 +541,7 @@
  */
 union zero_negate_512
 {
-    unsigned u[16];
+    FFTZ_UINT32 u[16];
     __m512 s;
     __m512d d;
 };

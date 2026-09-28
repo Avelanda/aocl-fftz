@@ -48,8 +48,14 @@ FFTZ_INT32 setup_real_ct_solver(aoclfftz_solution_t *sol,
 
 /**
  * Recursive Real FFT solution tree (no SWAP):
- *   CT -> next_sol = radix_r (Direct, stage 0, R2HC/R2HCF real stage)
- *      -> radix_r->next_sol = radix_m (Direct C2C combine, or nested CT)
+ *   CT -> next_sol = radix_r stage
+ *      -> radix_m (Direct C2C combine, or nested CT)
+ *
+ * In TRUE_RECURSION, CT runs the combine itself, so it must find radix_m, the
+ * stage after radix_r. That is normally radix_r->next_sol. But a Bluestein
+ * prime radix_r expands into a Batched node driving a Bluestein worker, so
+ * radix_m sits one hop out at next_sol->next_sol. get_next_real_stage() then
+ * returns radix_m for a plain and a Bluestein-prime radix_r alike.
  *
  * PARTIAL_RECURSION: CT delegates to next_sol = radix_r, which then chains to
  *   radix_m via HAS_NEXT inside the Direct solver. Each Direct solver handles
@@ -68,9 +74,9 @@ FFTZ_INT32 setup_real_ct_solver(aoclfftz_solution_t *sol,
  *   whereas the complex CT executes radix_m (grandchild) before radix_r.
  *
  * The real leaf solvers resolve their buffers from the per-call ctx and their
- * setup-time roles, so ctx is forwarded unchanged. radix_m is the stage right
- * after radix_r, and every Direct CT stage ping-pongs the aux pools in ctx once
- * its kernels are done, so radix_m already sees the swapped aux pools.
+ * setup-time roles, so ctx is forwarded unchanged. Every Direct CT stage, or
+ * Batched -> Bluestein stage, ping-pongs the aux pools once all of its work is
+ * done, so radix_m already sees the swapped aux pools.
  */
 static FFTZ_INT32 execute_real_ct_solver(aoclfftz_solution_t *sol,
                                          aoclfftz_mutable_ctx_t *ctx)
@@ -93,7 +99,7 @@ static FFTZ_INT32 execute_real_ct_solver(aoclfftz_solution_t *sol,
     // The twiddle multiplication is fused inside radix_m's C2C kernel. A CT node
     // is an r*m decomposition, so radix_m is always present (as in the complex
     // CT solver, which likewise executes it unconditionally).
-    aoclfftz_solution_t *radix_m_sol = radix_r_sol->next_sol;
+    aoclfftz_solution_t *radix_m_sol = get_next_real_stage(radix_r_sol);
     ret = radix_m_sol->solver->execute_solver(radix_m_sol, ctx);
 #else
     ret = radix_r_sol->solver->execute_solver(radix_r_sol, ctx);

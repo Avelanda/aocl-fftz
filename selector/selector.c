@@ -75,56 +75,76 @@ FFTZ_INT32 register_solvers_kernels(kernel_tables_t *kernel_tables,
                                     kernels_twid_c2c_fwd,
                                     kernels_twid_c2c_bwd, dt, dir, cpu_flags);
 
-    kernel_tables->ele_mul[FORWARD_FFT_DIR] =
+    kernel_tables->bs.ele_mul[FORWARD_FFT_DIR] =
         register_elementwise_mul_kernel(cpu_flags, dt, FORWARD_FFT_DIR);
-    kernel_tables->ele_mul[BACKWARD_FFT_DIR] =
+    kernel_tables->bs.ele_mul[BACKWARD_FFT_DIR] =
         register_elementwise_mul_kernel(cpu_flags, dt, BACKWARD_FFT_DIR);
-    kernel_tables->ele_mul_strided_in[FORWARD_FFT_DIR] =
+    kernel_tables->bs.ele_mul_strided_in[FORWARD_FFT_DIR] =
         register_elementwise_mul_strided_in_kernel(cpu_flags, dt,
                                                    FORWARD_FFT_DIR);
-    kernel_tables->ele_mul_strided_in[BACKWARD_FFT_DIR] =
+    kernel_tables->bs.ele_mul_strided_in[BACKWARD_FFT_DIR] =
         register_elementwise_mul_strided_in_kernel(cpu_flags, dt,
                                                    BACKWARD_FFT_DIR);
-    kernel_tables->ele_mul_fused_norm[FORWARD_FFT_DIR] =
+    kernel_tables->bs.ele_mul_fused_norm[FORWARD_FFT_DIR] =
         register_elementwise_mul_fused_norm_kernel(cpu_flags, dt, FORWARD_FFT_DIR);
-    kernel_tables->ele_mul_fused_norm[BACKWARD_FFT_DIR] =
+    kernel_tables->bs.ele_mul_fused_norm[BACKWARD_FFT_DIR] =
         register_elementwise_mul_fused_norm_kernel(cpu_flags, dt, BACKWARD_FFT_DIR);
-    kernel_tables->ele_mul_fused_norm_strided_out[FORWARD_FFT_DIR] =
+    kernel_tables->bs.ele_mul_fused_norm_strided_out[FORWARD_FFT_DIR] =
         register_elementwise_mul_fused_norm_strided_out_kernel(
             cpu_flags, dt, FORWARD_FFT_DIR);
-    kernel_tables->ele_mul_fused_norm_strided_out[BACKWARD_FFT_DIR] =
+    kernel_tables->bs.ele_mul_fused_norm_strided_out[BACKWARD_FFT_DIR] =
         register_elementwise_mul_fused_norm_strided_out_kernel(
             cpu_flags, dt, BACKWARD_FFT_DIR);
-    if (kernel_tables->ele_mul[FORWARD_FFT_DIR] == NULL ||
-        kernel_tables->ele_mul[BACKWARD_FFT_DIR] == NULL ||
-        kernel_tables->ele_mul_strided_in[FORWARD_FFT_DIR] ==
+    kernel_tables->packed_rdft.recombine =
+        register_recombine_to_hc_kernel(cpu_flags, dt);
+    kernel_tables->packed_rdft.separate =
+        register_separate_from_hc_kernel(cpu_flags, dt);
+    kernel_tables->packed_rdft.recombine_3d =
+        register_recombine_to_hc_3d_kernel(cpu_flags, dt);
+    kernel_tables->packed_rdft.separate_3d =
+        register_separate_from_hc_3d_kernel(cpu_flags, dt);
+    if (kernel_tables->bs.ele_mul[FORWARD_FFT_DIR] == NULL ||
+        kernel_tables->bs.ele_mul[BACKWARD_FFT_DIR] == NULL ||
+        kernel_tables->bs.ele_mul_strided_in[FORWARD_FFT_DIR] ==
             NULL ||
-        kernel_tables->ele_mul_strided_in[BACKWARD_FFT_DIR] ==
+        kernel_tables->bs.ele_mul_strided_in[BACKWARD_FFT_DIR] ==
             NULL ||
-        kernel_tables->ele_mul_fused_norm[FORWARD_FFT_DIR] == NULL ||
-        kernel_tables->ele_mul_fused_norm[BACKWARD_FFT_DIR] == NULL ||
-        kernel_tables->ele_mul_fused_norm_strided_out[FORWARD_FFT_DIR] ==
+        kernel_tables->bs.ele_mul_fused_norm[FORWARD_FFT_DIR] == NULL ||
+        kernel_tables->bs.ele_mul_fused_norm[BACKWARD_FFT_DIR] == NULL ||
+        kernel_tables->bs.ele_mul_fused_norm_strided_out[FORWARD_FFT_DIR] ==
             NULL ||
-        kernel_tables->ele_mul_fused_norm_strided_out[BACKWARD_FFT_DIR] ==
-            NULL)
+        kernel_tables->bs.ele_mul_fused_norm_strided_out[BACKWARD_FFT_DIR] ==
+            NULL ||
+        kernel_tables->packed_rdft.recombine == NULL ||
+        kernel_tables->packed_rdft.separate == NULL ||
+        kernel_tables->packed_rdft.recombine_3d == NULL ||
+        kernel_tables->packed_rdft.separate_3d == NULL)
     {
         return SELECTOR_FAILURE;
     }
 
     // Register all four real Bluestein type conversion kernels for the plan.
     // Each real Bluestein node later binds the two it requires.
-    kernel_tables->type_convert_r2c =
+    kernel_tables->bs.convert_r2c =
         register_r2c_type_convert_kernel(cpu_flags, dt);
-    kernel_tables->type_convert_c2hc =
+    kernel_tables->bs.convert_c2hc =
         register_c2hc_type_convert_kernel(cpu_flags, dt);
-    kernel_tables->type_convert_hc2c =
+    kernel_tables->bs.convert_hc2c =
         register_hc2c_type_convert_kernel(cpu_flags, dt);
-    kernel_tables->type_convert_c2r =
+    kernel_tables->bs.convert_c2r =
         register_c2r_type_convert_kernel(cpu_flags, dt);
-    if (kernel_tables->type_convert_r2c == NULL ||
-        kernel_tables->type_convert_c2hc == NULL ||
-        kernel_tables->type_convert_hc2c == NULL ||
-        kernel_tables->type_convert_c2r == NULL)
+    // Packed spectrum variants for a Bluestein node standing in for the
+    // real-signal stage of a composite CT + Bluestein decomposition.
+    kernel_tables->bs.convert_c2hc_packed =
+        register_c2hc_packed_type_convert_kernel(cpu_flags, dt);
+    kernel_tables->bs.convert_hc2c_packed =
+        register_hc2c_packed_type_convert_kernel(cpu_flags, dt);
+    if (kernel_tables->bs.convert_r2c == NULL ||
+        kernel_tables->bs.convert_c2hc == NULL ||
+        kernel_tables->bs.convert_hc2c == NULL ||
+        kernel_tables->bs.convert_c2r == NULL ||
+        kernel_tables->bs.convert_c2hc_packed == NULL ||
+        kernel_tables->bs.convert_hc2c_packed == NULL)
     {
         return SELECTOR_FAILURE;
     }
@@ -312,9 +332,9 @@ check_prime_solvability_bluestein(aoclfftz_decomp_scheme_t *decomp_scheme,
     return 0;
 }
 
-FFTZ_INT32 is_prime(FFTZ_INT32 n)
+FFTZ_INT32 is_prime(FFTZ_INTP n)
 {
-    for (FFTZ_INT32 i = 2; i * i <= n; i++)
+    for (FFTZ_INTP i = 2; i * i <= n; i++)
     {
         if (n % i == 0)
         {
@@ -323,52 +343,6 @@ FFTZ_INT32 is_prime(FFTZ_INT32 n)
     }
 
     return 1;
-}
-
-// Divides out every factor of n that a kernel radix can handle, using the same
-// radix table as check_CT_solvability, and returns the remaining residue. The
-// residue determines how n must be solved:
-//   1         : the radices cover n completely, so CT or direct handles it
-//   n         : no radix divides n, so n is a prime or prime power with no
-//               kernel and the Bluestein solver handles it standalone
-//   otherwise : radices combined with such a prime, such as 34 = 2 x 17 or
-//               153 = 9 x 17. This requires a Bluestein below a Cooley-Tukey
-//               leaf, which is not yet supported.
-static FFTZ_INTP kernel_radix_residue(FFTZ_INTP n, kernel_t *kertab)
-{
-    FFTZ_INTP residue = n;
-
-    // Strip one supported radix at a time until no kernel radix divides the
-    // residue
-    while (check_CT_solvability(residue, kertab))
-    {
-        for (FFTZ_INTP i = 0; i < NUM_KERNELS_IN_EACH_CATEGORY; i++)
-        {
-            FFTZ_UINT32 radix = kertab[i].radix;
-            if (radix == 0) // End of suitable kernels in the list
-            {
-                break;
-            }
-            // Divide out this radix if it factorizes the residue
-            if (radix > 1 && (residue % (FFTZ_INTP)radix) == 0)
-            {
-                residue /= (FFTZ_INTP)radix;
-                break;
-            }
-        }
-    }
-
-    return residue;
-}
-
-// Reports whether n is the unsupported case above, a prime with no kernel
-// combined with kernel radices. A standalone prime or prime power is supported,
-// as the Bluestein solver handles it directly.
-static FFTZ_INT32 is_prime_in_ct(FFTZ_INTP n, kernel_t *kertab)
-{
-    FFTZ_INTP residue = kernel_radix_residue(n, kertab);
-
-    return (residue != 1 && residue != n);
 }
 
 // Check if the input problem contains a prime factor that requires a
@@ -380,9 +354,9 @@ FFTZ_INT32 check_bluestein_problem(aoclfftz_decomp_scheme_t *decomp_scheme)
     {
         FFTZ_INTP n = decomp_scheme->dims[i].n;
         // Check for prime factors greater than 13 in (n)
-        for (FFTZ_INT32 i = 17; i <= n; i++)
+        for (FFTZ_INTP j = 17; j <= n; j++)
         {
-            if (n % i == 0 && is_prime(i))
+            if (n % j == 0 && is_prime(j))
             {
                 return 1;
             }
@@ -419,6 +393,114 @@ FFTZ_INT32 check_batched_ct_l1_direct_solvability(FFTZ_INTP n,
         }
     }
     return 0;
+}
+
+// The real-packed solver drives one child CFFT over a complete transform.
+// Only used for even sized CT problems.
+// Batched problems will have several such transforms.
+//
+// Rank 1 uses the 1D recombine/separate (non-DFT) kernels.
+// Rank 3 uses the dedicated 3D grid kernel variants when the packed layout is
+// contiguous along every outer dimension. Other ranks use the regular real selector.
+static FFTZ_INT32
+is_packed_rdft_layout_contiguous(const aoclfftz_decomp_scheme_t *decomp)
+{
+    FFTZ_INTP n = decomp->dims[0].n;
+    FFTZ_INTP n0_by2 = n / 2;
+    FFTZ_UINT8 forward = (FFT_DIR(decomp->flags) == FORWARD_FFT_DIR);
+    FFTZ_UINT8 oop = IS_OUT_OF_PLACE(decomp->flags);
+    if (decomp->dims[0].in_stride != 1 || decomp->dims[0].out_stride != 1)
+    {
+        return 0;
+    }
+    if (decomp->dim_rank == 1)
+    {
+        return 1;
+    }
+
+    FFTZ_INTP exp_in_stride;
+    FFTZ_INTP exp_out_stride;
+    if (forward)
+    {
+        if (oop)
+        {
+            // Out-of-place R2C uses N real inputs and M + 1 HC outputs per row.
+            exp_in_stride = n;
+            exp_out_stride = n0_by2 + 1;
+        }
+        else
+        {
+            // In-place R2C pads the real row to alias the M + 1 HC output.
+            exp_in_stride = 2 * (n0_by2 + 1);
+            exp_out_stride = n0_by2 + 1;
+        }
+    }
+    else
+    {
+        if (oop)
+        {
+            // Out-of-place C2R expands M + 1 HC inputs into N real outputs.
+            exp_in_stride = n0_by2 + 1;
+            exp_out_stride = n;
+        }
+        else
+        {
+            // In-place C2R overwrites the HC input with a padded real output row.
+            exp_in_stride = n0_by2 + 1;
+            exp_out_stride = 2 * (n0_by2 + 1);
+        }
+    }
+
+    for (FFTZ_INT32 dim = 1; dim < decomp->dim_rank; dim++)
+    {
+        if (decomp->dims[dim].in_stride != exp_in_stride ||
+            decomp->dims[dim].out_stride != exp_out_stride ||
+            decomp->dims[dim].n <= 0)
+        {
+            return 0;
+        }
+        exp_in_stride *= decomp->dims[dim].n;
+        exp_out_stride *= decomp->dims[dim].n;
+    }
+    return 1;
+}
+
+static FFTZ_INT32 is_packed_rdft_applicable(aoclfftz_selector_t *sel,
+                                            aoclfftz_realhelper_t *realhelper)
+{
+    if (realhelper == NULL || realhelper->is_CT)
+    {
+        return 0;
+    }
+
+    aoclfftz_decomp_scheme_t *decomp = sel->solution->decomp_scheme;
+    FFTZ_INTP n = decomp->dims[0].n;
+
+    FFTZ_UINT8 is_supported_rank =
+        IS_REAL(decomp->flags) &&
+        (decomp->dim_rank == 1 || decomp->dim_rank == 3);
+    FFTZ_UINT8 is_root_problem =
+        (realhelper->problem_size == n) && (realhelper->stage == 0) &&
+        realhelper->is_last_stage && !realhelper->is_buffered_invoked;
+    FFTZ_UINT8 has_supported_batch_layout = (decomp->batched_vecs == NULL);
+    FFTZ_UINT8 is_in_order = !IS_OUT_OF_ORDER(decomp->flags);
+    // Packed execute is single-threaded. avl_threads==1 is enough: an MT
+    // batched parent may still have pthr_fft->num_threads > 1. Concurrent
+    // units stay independent via I/O strides and slot_idx.
+    FFTZ_UINT8 has_single_child_thread = (decomp->thread_info->avl_threads == 1);
+    FFTZ_UINT8 is_supported_size = (n > MAX_REAL_KERNEL_RADIX) && !(n & 1);
+    FFTZ_UINT8 has_rank_kernels = 1;
+    if (decomp->dim_rank == 3)
+    {
+        FFTZ_UINT8 forward = (FFT_DIR(decomp->flags) == FORWARD_FFT_DIR);
+        has_rank_kernels =
+            forward ? (sel->kernel_tables->packed_rdft.recombine_3d != NULL)
+                    : (sel->kernel_tables->packed_rdft.separate_3d != NULL);
+    }
+
+    return is_root_problem && is_supported_rank && has_supported_batch_layout &&
+           is_in_order && has_single_child_thread && is_supported_size &&
+           has_rank_kernels && is_packed_rdft_layout_contiguous(decomp);
 }
 
 // Fixed decision logic and CPI based selector mode execution for the
@@ -710,7 +792,7 @@ FFTZ_INT32 selector_fixed_mode_dft_(aoclfftz_selector_t *sel)
 // real input problem based on the applicable tables
 // of real solvers and real kernels
 FFTZ_INT32 selector_fixed_mode_rdft_(aoclfftz_selector_t *sel,
-                                aoclfftz_realhelper_t *realhelper)
+                                     aoclfftz_realhelper_t *realhelper)
 {
     aoclfftz_generic_solver_t *solver_obj = sel->solution->solver;
 
@@ -720,45 +802,36 @@ FFTZ_INT32 selector_fixed_mode_rdft_(aoclfftz_selector_t *sel,
     FFTZ_INT32 pre_fuse_vec_rank = sel->solution->decomp_scheme->vec_rank;
     FFTZ_INT32 dim_rank = sel->solution->decomp_scheme->dim_rank;
 
-    // Reject composite sizes whose factorization leaves a prime above the
-    // highest supported radix, before any partial solution tree is built. Such
-    // a prime would land at a Cooley-Tukey leaf and need an unsupported
-    // Bluestein leaf; standalone primes and prime powers still use Bluestein.
-    if (is_prime_in_ct(sel->solution->decomp_scheme->dims[0].n, kertab))
-    {
-        AOCLFFTZ_ERROR("SELECTOR_FAILURE : "
-                       "Composite sizes with a prime factor above the "
-                       "highest supported radix are not supported yet");
-        return SELECTOR_FAILURE;
-    }
-
     FFTZ_INT32 is_FFT_ker_supported = check_FFT_kernel_support(
         sel->solution->decomp_scheme->dims[0].n, kertab,
         !IS_NOT_INNERMOST_DIM(sel->solution->decomp_scheme->flags));
 
     FFTZ_INT32 is_solvable_by_bluestein =
-            check_prime_solvability_bluestein(sel->solution->decomp_scheme,
-                                              is_FFT_ker_supported, kertab);
+        check_prime_solvability_bluestein(sel->solution->decomp_scheme,
+                                          is_FFT_ker_supported, kertab);
     FFTZ_INT32 level1_cond1 = 0;
     FFTZ_INT32 level1_cond2 = 0;
     FFTZ_INT32 level2_cond = 0;
-
-    SET_SELECTOR_MODE(sel->solution->decomp_scheme->flags,
-                      AOCLFFTZ_FIXED_SELECTOR);
 
     if (pre_fuse_vec_rank > 1)
     {
         fuse_vecs(sel->solution, is_FFT_ker_supported);
     }
+
+    FFTZ_INT32 is_packed_rdft = is_packed_rdft_applicable(sel, realhelper);
+
     // SOLVER_BATCHED
     level1_cond1 =
-        ((sel->solution->decomp_scheme->dims[0].n != 1) && /* non-size-one */
-         ((pre_fuse_vec_rank > 1) ||                        /* ND Batched */
+        // A 1D batched size-one problem needs no batched parent; its solver
+        // handles the batch. An ND outer batch still needs a batched parent.
+        ((sel->solution->decomp_scheme->dims[0].n != 1 || dim_rank > 1) &&
+         ((pre_fuse_vec_rank > 1) || /* ND Batched */
           /* 1D Batched 1D Non-direct cases*/
           ((sel->solution->decomp_scheme->vecs[0].n > 1) &&
            !is_FFT_ker_supported &&
-           (sel->solution->decomp_scheme->dims[0].n ==
-            realhelper->problem_size)) ||
+           ((sel->solution->decomp_scheme->dims[0].n ==
+             realhelper->problem_size) ||
+            IS_BLUESTEIN_CT_STAGE(sel->solution->decomp_scheme->flags))) ||
           /* 1D Batched ND case*/
           (dim_rank > 1 && sel->solution->decomp_scheme->vecs[0].n > 1)));
     // SOLVER_NDIM
@@ -777,6 +850,31 @@ FFTZ_INT32 selector_fixed_mode_rdft_(aoclfftz_selector_t *sel,
     // SOLVER_PFA
     // SOLVER_RADER
 
+    FFTZ_INT32 is_batched = (level1_cond1 & 0x1);
+
+    // Packed solves one complete transform. Its complex child uses the
+    // complex model selected by selector_driver_rdft_. Try it before fused
+    // batched-CT / generic real paths.
+    if (is_packed_rdft && !is_batched)
+    {
+        solver_obj->solver_type =
+            (FFT_DIR(sel->solution->decomp_scheme->flags) == FORWARD_FFT_DIR)
+                ? SOLVER_REAL_PACKED_R2C
+                : SOLVER_REAL_PACKED_C2R;
+        if (set_solver_fp(solver_obj) == SOLVER_SUCCESS)
+        {
+            ret = selector_real_packed_rdft(sel, kertab, realhelper);
+            if (ret == SELECTOR_SUCCESS || ret == AOCLFFTZ_MEMORY_FAILURE)
+            {
+                return ret;
+            }
+        }
+        solver_obj->solver_type = SOLVER_NULL;
+        solver_obj->execute_solver = NULL;
+    }
+
+    // A packed-capable batch still reaches the batched solver below so each
+    // unit can pick packed.
     if (check_batched_ct_l1_direct_rdft_solvability(
             sel->solution->decomp_scheme, realhelper, kertab))
     {
@@ -792,7 +890,7 @@ FFTZ_INT32 selector_fixed_mode_rdft_(aoclfftz_selector_t *sel,
     }
 
     // Batched/vector FFT Solver
-    if (level1_cond1 & 0x1)
+    if (is_batched)
     {
         // The batched family selector decides the ST/MT variant; the execute
         // fp is bound here, at the selector level, once that decision is made.
@@ -815,9 +913,10 @@ FFTZ_INT32 selector_fixed_mode_rdft_(aoclfftz_selector_t *sel,
 
         return selector_ndim_rdft(sel, kertab, realhelper);
     }
-    // Bluestein FFT Solver, for a standalone prime or prime power that has no
-    // kernel. Sizes that would need such a prime below a Cooley-Tukey leaf are
-    // already rejected up front.
+    // Bluestein FFT Solver, for a standalone prime or prime power with no
+    // kernel. A size that also has a kernel radix is CT-solvable, so
+    // is_solvable_by_bluestein is 0 and it takes the composite CT + Bluestein
+    // path above instead.
     if (level1_cond1 & 0x4)
     {
         solver_obj->solver_type = SOLVER_REAL_BLUESTEIN;
@@ -1264,13 +1363,26 @@ FFTZ_INT32 selector_model_rdft_(aoclfftz_selector_t *sel,
 }
 
 static FFTZ_VOID setup_twiddle_buffer_complex(aoclfftz_solution_t *sol);
-static FFTZ_VOID setup_twiddle_buffer_real(aoclfftz_solution_t *sol);
+static FFTZ_INT32 setup_twiddle_buffer_real(aoclfftz_solution_t *sol);
 
 static FFTZ_VOID compute_exec_metadata(aoclfftz_solution_t *sol,
-                                  aoclfftz_immutable_metadata_t *out);
+                                       aoclfftz_immutable_metadata_t *out);
 
 static FFTZ_INT32 setup_chirp_fft(aoclfftz_solution_t *sol,
                                   aoclfftz_mutable_ctx_t *ctx);
+
+static inline FFTZ_UINT8
+is_nop_solvable(const aoclfftz_decomp_scheme_t *decomp_scheme)
+{
+    for (FFTZ_INT32 i = 0; i < decomp_scheme->vec_rank; i++)
+    {
+        if (decomp_scheme->vecs[i].n == 0)
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
 
 static inline FFTZ_INT32 prepare_and_setup_dft(aoclfftz_selector_t *sel_obj)
 {
@@ -1289,11 +1401,15 @@ static inline FFTZ_INT32 prepare_and_setup_dft(aoclfftz_selector_t *sel_obj)
     cap_plan_thread_budget(sel_obj->solution->decomp_scheme);
 #endif
 
-    if (IS_REAL(sel_obj->solution->decomp_scheme->flags))
+    if (is_nop_solvable(sel_obj->solution->decomp_scheme))
+    {
+        ret = selector_nop_dft(sel_obj);
+    }
+    else if (IS_REAL(sel_obj->solution->decomp_scheme->flags))
     {
         aoclfftz_realhelper_t *realhelper;
         ALLOC_ALIGN_UNINIT(realhelper, aoclfftz_realhelper_t,
-            sizeof(aoclfftz_realhelper_t));
+                           sizeof(aoclfftz_realhelper_t));
         if (realhelper == NULL)
         {
             return AOCLFFTZ_MEMORY_FAILURE;
@@ -1302,6 +1418,7 @@ static inline FFTZ_INT32 prepare_and_setup_dft(aoclfftz_selector_t *sel_obj)
         realhelper->is_CT = 0;
         realhelper->is_last_stage = 1;
         realhelper->is_buffered_invoked = 0;
+        realhelper->packed_group_count = 0;
         realhelper->problem_size = sel_obj->solution->decomp_scheme->dims[0].n;
         if (FFT_DIR(sel_obj->solution->decomp_scheme->flags) ==
             FORWARD_FFT_DIR)
@@ -1326,7 +1443,7 @@ static inline FFTZ_INT32 prepare_and_setup_dft(aoclfftz_selector_t *sel_obj)
             // (Buffered -> CT -> Direct(r) -> Direct(m) -> ...).
             swap_real_ct_solutions(sel_obj);
 #endif
-            setup_twiddle_buffer_real(sel_obj->solution);
+            ret = setup_twiddle_buffer_real(sel_obj->solution);
         }
         FREE_ALIGN_ALLOCATED_MEM(realhelper);
     }
@@ -1388,12 +1505,26 @@ static inline FFTZ_INT32 prepare_and_setup_dft(aoclfftz_selector_t *sel_obj)
         }
     }
 
+    // Allocate the shared real-packed scratch pool for the real-packed roots.
+    if (sel_obj->exec_metadata->real_packed_buffer_size > 0)
+    {
+        ALLOC_ALIGN_UNINIT(
+            sel_obj->exec_metadata->base_ctx.real_packed_buf_base, FFTZ_VOID,
+            sel_obj->exec_metadata->real_packed_buffer_size);
+        if (sel_obj->exec_metadata->base_ctx.real_packed_buf_base == NULL)
+        {
+            ret = AOCLFFTZ_MEMORY_FAILURE;
+            goto exit_prepare_and_setup_dft;
+        }
+    }
+
     aoclfftz_mutable_ctx_t *base = &sel_obj->exec_metadata->base_ctx;
     base->in_real  = sel_obj->solution->decomp_scheme->in_real;
     base->in_imag  = sel_obj->solution->decomp_scheme->in_imag;
     base->out_real = sel_obj->solution->decomp_scheme->out_real;
     base->out_imag = sel_obj->solution->decomp_scheme->out_imag;
     base->flags    = sel_obj->solution->decomp_scheme->flags;
+    base->batch_idx = 0;
 
     ret = setup_chirp_fft(sel_obj->solution, base);
     if (ret != SELECTOR_SUCCESS)
@@ -1421,17 +1552,22 @@ FFTZ_VOID *setup_dft_f(aoclfftz_prob_desc_f *problem)
     // shrink dim_rank
     // used in n dim case where size one problems are removed
     FFTZ_INT32 dim_rank = 1;
-    SHRINK_DIM_RANK(problem->dims, problem->dim_rank, dim_rank);
+    SHRINK_DIM_RANK(problem->dims, problem->dim_rank, flags.fft_type,
+                    dim_rank);
 
     kernel_t kt_dft[MAX_NUM_KERNELS_IN_TABLE] = {0};
     kernel_t kt_twid_dft[MAX_NUM_KERNELS_IN_TABLE] = {0};
     kernel_t kt_rdft[MAX_NUM_KERNELS_IN_TABLE] = {0};
     kernel_tables_t kertab_tables = {
-        kt_dft, kt_twid_dft,
-        kt_rdft, {NULL, NULL}, /* ele_mul[NUM_FFT_DIRS] */
-        {NULL, NULL},          /* ele_mul_strided_in[NUM_FFT_DIRS] */
-        {NULL, NULL},          /* ele_mul_fused_norm[NUM_FFT_DIRS] */
-        {NULL, NULL}};         /* ele_mul_fused_norm_strided_out[NUM_FFT_DIRS] */
+        kt_dft, kt_twid_dft, kt_rdft,
+        {                           /* bs: filled by register_solvers_kernels */
+            {NULL, NULL},           /* ele_mul */
+            {NULL, NULL},           /* ele_mul_strided_in */
+            {NULL, NULL},           /* ele_mul_fused_norm */
+            {NULL, NULL},           /* ele_mul_fused_norm_strided_out */
+            NULL, NULL, NULL, NULL, /* convert_r2c/c2hc/hc2c/c2r */
+            NULL, NULL},            /* convert_c2hc_packed/hc2c_packed */
+        {NULL, NULL}};              /* packed_rdft kernels */
 
     // allocate selector object
     sel_obj = alloc_selector(problem->vec_rank, dim_rank, &kertab_tables, NULL);
@@ -1496,17 +1632,22 @@ FFTZ_VOID *setup_dft_d(aoclfftz_prob_desc_d *problem)
     // shrink dim_rank
     // used in n dim case where size one problems are removed
     FFTZ_INT32 dim_rank = 1;
-    SHRINK_DIM_RANK(problem->dims, problem->dim_rank, dim_rank);
+    SHRINK_DIM_RANK(problem->dims, problem->dim_rank, flags.fft_type,
+                    dim_rank);
 
     kernel_t kt_dft[MAX_NUM_KERNELS_IN_TABLE] = {0};
     kernel_t kt_twid_dft[MAX_NUM_KERNELS_IN_TABLE] = {0};
     kernel_t kt_rdft[MAX_NUM_KERNELS_IN_TABLE] = {0};
     kernel_tables_t kertab_tables = {
-        kt_dft, kt_twid_dft,
-        kt_rdft, {NULL, NULL}, /* ele_mul[NUM_FFT_DIRS] */
-        {NULL, NULL},          /* ele_mul_strided_in[NUM_FFT_DIRS] */
-        {NULL, NULL},          /* ele_mul_fused_norm[NUM_FFT_DIRS] */
-        {NULL, NULL}};         /* ele_mul_fused_norm_strided_out[NUM_FFT_DIRS] */
+        kt_dft, kt_twid_dft, kt_rdft,
+        {                           /* bs: filled by register_solvers_kernels */
+            {NULL, NULL},           /* ele_mul */
+            {NULL, NULL},           /* ele_mul_strided_in */
+            {NULL, NULL},           /* ele_mul_fused_norm */
+            {NULL, NULL},           /* ele_mul_fused_norm_strided_out */
+            NULL, NULL, NULL, NULL, /* convert_r2c/c2hc/hc2c/c2r */
+            NULL, NULL},            /* convert_c2hc_packed/hc2c_packed */
+        {NULL, NULL}};              /* packed_rdft kernels */
 
     // allocate selector object
     sel_obj = alloc_selector(problem->vec_rank, dim_rank, &kertab_tables, NULL);
@@ -1568,17 +1709,22 @@ FFTZ_VOID *setup_dft_f_64_(aoclfftz_prob_desc_f_64_ *problem)
     // shrink dim_rank
     // used in n dim case where size one problems are removed
     FFTZ_INT32 dim_rank = 1;
-    SHRINK_DIM_RANK(problem->dims, problem->dim_rank, dim_rank);
+    SHRINK_DIM_RANK(problem->dims, problem->dim_rank, flags.fft_type,
+                    dim_rank);
 
     kernel_t kt_dft[MAX_NUM_KERNELS_IN_TABLE] = {0};
     kernel_t kt_twid_dft[MAX_NUM_KERNELS_IN_TABLE] = {0};
     kernel_t kt_rdft[MAX_NUM_KERNELS_IN_TABLE] = {0};
     kernel_tables_t kertab_tables = {
-        kt_dft, kt_twid_dft,
-        kt_rdft, {NULL, NULL}, /* ele_mul[NUM_FFT_DIRS] */
-        {NULL, NULL},          /* ele_mul_strided_in[NUM_FFT_DIRS] */
-        {NULL, NULL},          /* ele_mul_fused_norm[NUM_FFT_DIRS] */
-        {NULL, NULL}};         /* ele_mul_fused_norm_strided_out[NUM_FFT_DIRS] */
+        kt_dft, kt_twid_dft, kt_rdft,
+        {                           /* bs: filled by register_solvers_kernels */
+            {NULL, NULL},           /* ele_mul */
+            {NULL, NULL},           /* ele_mul_strided_in */
+            {NULL, NULL},           /* ele_mul_fused_norm */
+            {NULL, NULL},           /* ele_mul_fused_norm_strided_out */
+            NULL, NULL, NULL, NULL, /* convert_r2c/c2hc/hc2c/c2r */
+            NULL, NULL},            /* convert_c2hc_packed/hc2c_packed */
+        {NULL, NULL}};              /* packed_rdft kernels */
 
     // allocate selector object
     sel_obj = alloc_selector(problem->vec_rank, dim_rank, &kertab_tables, NULL);
@@ -1639,17 +1785,22 @@ FFTZ_VOID *setup_dft_d_64_(aoclfftz_prob_desc_d_64_ *problem)
     // shrink dim_rank
     // used in n dim case where size one problems are removed
     FFTZ_INT32 dim_rank = 1;
-    SHRINK_DIM_RANK(problem->dims, problem->dim_rank, dim_rank);
+    SHRINK_DIM_RANK(problem->dims, problem->dim_rank, flags.fft_type,
+                    dim_rank);
 
     kernel_t kt_dft[MAX_NUM_KERNELS_IN_TABLE] = {0};
     kernel_t kt_twid_dft[MAX_NUM_KERNELS_IN_TABLE] = {0};
     kernel_t kt_rdft[MAX_NUM_KERNELS_IN_TABLE] = {0};
     kernel_tables_t kertab_tables = {
-        kt_dft, kt_twid_dft,
-        kt_rdft, {NULL, NULL}, /* ele_mul[NUM_FFT_DIRS] */
-        {NULL, NULL},          /* ele_mul_strided_in[NUM_FFT_DIRS] */
-        {NULL, NULL},          /* ele_mul_fused_norm[NUM_FFT_DIRS] */
-        {NULL, NULL}};         /* ele_mul_fused_norm_strided_out[NUM_FFT_DIRS] */
+        kt_dft, kt_twid_dft, kt_rdft,
+        {                           /* bs: filled by register_solvers_kernels */
+            {NULL, NULL},           /* ele_mul */
+            {NULL, NULL},           /* ele_mul_strided_in */
+            {NULL, NULL},           /* ele_mul_fused_norm */
+            {NULL, NULL},           /* ele_mul_fused_norm_strided_out */
+            NULL, NULL, NULL, NULL, /* convert_r2c/c2hc/hc2c/c2r */
+            NULL, NULL},            /* convert_c2hc_packed/hc2c_packed */
+        {NULL, NULL}};              /* packed_rdft kernels */
 
     // allocate selector object
     sel_obj = alloc_selector(problem->vec_rank, dim_rank, &kertab_tables, NULL);
@@ -1717,16 +1868,16 @@ FFTZ_VOID fuse_vecs(aoclfftz_solution_t *sol, FFTZ_INT32 is_FFT_ker_supported)
     {
         // expected stride is the regular stride we obtain by n * stride of
         // prev dim
-        FFTZ_INTP expected_in_stride = vecs[i-1].n * vecs[i-1].in_stride;
-        FFTZ_INTP expected_out_stride = vecs[i-1].n * vecs[i-1].out_stride;
+        FFTZ_INTP exp_in_stride_stride = vecs[i-1].n * vecs[i-1].in_stride;
+        FFTZ_INTP exp_out_stride_stride = vecs[i-1].n * vecs[i-1].out_stride;
         FFTZ_INTP actual_in_stride = vecs[i].in_stride;
         FFTZ_INTP actual_out_stride = vecs[i].out_stride;
         // Do not fuse the first vector to enable memory-efficient batch
         // processing for NDim problems where the outerdimension is CT.
         // ie., problems like AxBxC that decomposes to BxCvA and A is CT,
         // its efficient if we do not fuse BxC
-        if ((expected_in_stride == actual_in_stride &&
-             expected_out_stride == actual_out_stride) &&
+        if ((exp_in_stride_stride == actual_in_stride &&
+             exp_out_stride_stride == actual_out_stride) &&
              (i != 1 || is_FFT_ker_supported ||
                         !IS_NOT_INNERMOST_DIM(sol->decomp_scheme->flags)))
         {
@@ -1753,7 +1904,7 @@ FFTZ_VOID fuse_vecs(aoclfftz_solution_t *sol, FFTZ_INT32 is_FFT_ker_supported)
             is_fusable = 0;
         }
     }
-    //initalize last vector
+    // initialize last vector
     vecs[fused_rank].n = fused_size;
     vecs[fused_rank].out_stride = vecs[last_fused_idx].out_stride;
     vecs[fused_rank].in_stride = vecs[last_fused_idx].in_stride;
@@ -1861,42 +2012,48 @@ static FFTZ_VOID setup_twiddle_buffer_complex(aoclfftz_solution_t *solution)
 #endif
 }
 
-// Bluestein and N-D are the only real solvers that hold a complex subtree.
-// The walks in setup_twiddle_buffer_real never step into one, so each subtree
-// is set up as the walk reaches the node holding it.
+// Bluestein, ND and real-packed solvers own complex next_sol subtrees. N-D solvers
+// hold their complex subtree separately on dft_bufs->nd_sol.
 
-// Call once the node is known to be Bluestein. Its child is next_sol.
-static FFTZ_VOID setup_twiddle_bluestein_subtree(aoclfftz_solution_t *sol)
+// Set up the complex child a Bluestein or N-D node keeps on complex_sol. Those
+// are the only real solvers that hold one, so a non-NULL complex_sol is enough
+// to identify the node; no solver_type check is needed. Callers must reach each
+// holding node exactly once, since setup_twiddle_buffer_complex allocates.
+static FFTZ_VOID setup_twiddle_complex_subtree(aoclfftz_solution_t *sol)
 {
-    if (HAS_NEXT(sol))
+    if (sol->dft_bufs != NULL && sol->dft_bufs->complex_sol != NULL)
     {
-        setup_twiddle_buffer_complex(sol->next_sol);
+        setup_twiddle_buffer_complex(sol->dft_bufs->complex_sol);
     }
 }
 
-// Call on any node. Only an N-D node holds a subtree, on dft_bufs->nd_sol.
-static FFTZ_VOID setup_twiddle_ndim_subtree(aoclfftz_solution_t *sol)
+// Packed may be the real root or the terminal child below batch/ND wrappers.
+// Its next_sol is always a complex subproblem and needs an independent twiddle
+// setup before the packed recombine/separate twiddle is attached to this node.
+static FFTZ_INT32 setup_twiddle_packed_subproblem(aoclfftz_solution_t *sol)
 {
-    if (sol->solver->solver_type == SOLVER_REAL_NDIM && sol->dft_bufs != NULL
-        && sol->dft_bufs->nd_sol != NULL)
+    setup_twiddle_buffer_complex(sol->next_sol);
+#if IN_MEMORY_TWIDDLE_FACTORS == 1
+    FFTZ_UINT32 dt_prec = DT_PRECISION_FLAG(sol->decomp_scheme->flags);
+    FFTZ_INTP n = sol->decomp_scheme->dims[0].n;
+    FFTZ_INTP n0_by2 = n / 2;
+    FFTZ_VOID *TW = alloc_twiddle_buffer(2 * (n0_by2 / 2 + 1), dt_prec);
+    if (TW == NULL)
     {
-        setup_twiddle_buffer_complex(sol->dft_bufs->nd_sol);
+        return AOCLFFTZ_SETUP_FAILURE;
     }
+    compute_real_packed_twiddle(TW, n, dt_prec);
+    sol->twiddle->TW = TW;
+    sol->twiddle->twiddle_buf_ptr = TW;
+#endif
+    return AOCLFFTZ_SUCCESS;
 }
 
-static FFTZ_VOID setup_twiddle_buffer_real(aoclfftz_solution_t *solution)
+static FFTZ_INT32 setup_twiddle_buffer_real(aoclfftz_solution_t *solution)
 {
     if (solution == NULL)
     {
-        return;
-    }
-    // A Bluestein root is the standalone prime case, which leaves no real node
-    // for the walks below. For a batched prime the node sits further down the
-    // chain, where both walks stop at it.
-    if (solution->solver->solver_type == SOLVER_REAL_BLUESTEIN)
-    {
-        setup_twiddle_bluestein_subtree(solution);
-        return;
+        return SELECTOR_FAILURE;
     }
 #if IN_MEMORY_TWIDDLE_FACTORS == 1
     FFTZ_UINT32 dt_prec = DT_PRECISION_FLAG(solution->decomp_scheme->flags);
@@ -1906,14 +2063,21 @@ static FFTZ_VOID setup_twiddle_buffer_real(aoclfftz_solution_t *solution)
         aoclfftz_solution_t *prev = solution;
         FOR_EACH_SOLUTION(curr, solution)
         {
+            // Its complex child is off-chain. A packed Batched stage may link a
+            // following real CT stage on next_sol, so stop only at a true tail.
+            if (curr->solver->solver_type == SOLVER_REAL_PACKED_R2C ||
+                curr->solver->solver_type == SOLVER_REAL_PACKED_C2R)
+            {
+                return setup_twiddle_packed_subproblem(curr);
+            }
+            setup_twiddle_complex_subtree(curr);
             // Everything below a Bluestein node is complex, so set up that
             // subtree and stop walking.
-            if (curr->solver->solver_type == SOLVER_REAL_BLUESTEIN)
+            if (curr->solver->solver_type == SOLVER_REAL_BLUESTEIN &&
+                !HAS_NEXT(curr))
             {
-                setup_twiddle_bluestein_subtree(curr);
                 break;
             }
-            setup_twiddle_ndim_subtree(curr);
             // Always inherit the parent's twiddle buffer reference.
             curr->twiddle->TW = prev->twiddle->TW;
             if (curr->solver->solver_type == SOLVER_REAL_CT ||
@@ -1924,12 +2088,19 @@ static FFTZ_VOID setup_twiddle_buffer_real(aoclfftz_solution_t *solution)
                     curr != NULL &&
                     !is_solver_real_direct_family(curr->solver->solver_type))
                 {
+                    // A forward composite head is a Bluestein standing in for
+                    // the Direct(r) stage: it holds its complex chirp subtree
+                    // on complex_sol, so set that up as the walk steps over it.
+                    if (curr->solver->solver_type == SOLVER_REAL_BLUESTEIN)
+                    {
+                        setup_twiddle_complex_subtree(curr);
+                    }
                     curr->twiddle->TW = prev->twiddle->TW;
                     curr = curr->next_sol;
                 }
                 if (curr == NULL)
                 {
-                    return;
+                    return AOCLFFTZ_SUCCESS;
                 }
                 // In non-SWAP (recursive) tree, the first Direct after CT
                 // is stage-0 with no C2C kernels. Advance to the Direct
@@ -2019,17 +2190,27 @@ static FFTZ_VOID setup_twiddle_buffer_real(aoclfftz_solution_t *solution)
         aoclfftz_solution_t *prev = solution;
         // This walk begins at the node after the root, so the root is done
         // here instead.
-        setup_twiddle_ndim_subtree(solution);
+        if (solution->solver->solver_type == SOLVER_REAL_PACKED_R2C ||
+            solution->solver->solver_type == SOLVER_REAL_PACKED_C2R)
+        {
+            return setup_twiddle_packed_subproblem(solution);
+        }
+        setup_twiddle_complex_subtree(solution);
         FOR_EACH_SOLUTION(curr, solution->next_sol)
         {
-            // Everything below a Bluestein node is complex, so set up that
-            // subtree and stop walking.
-            if (curr->solver->solver_type == SOLVER_REAL_BLUESTEIN)
+            // Its complex child is off-chain. A packed Batched stage may link a
+            // following real CT stage on next_sol, so stop only at a true tail.
+            if (curr->solver->solver_type == SOLVER_REAL_PACKED_R2C ||
+                curr->solver->solver_type == SOLVER_REAL_PACKED_C2R)
             {
-                setup_twiddle_bluestein_subtree(curr);
+                return setup_twiddle_packed_subproblem(curr);
+            }
+            setup_twiddle_complex_subtree(curr);
+            if (curr->solver->solver_type == SOLVER_REAL_BLUESTEIN &&
+                !HAS_NEXT(curr))
+            {
                 break;
             }
-            setup_twiddle_ndim_subtree(curr);
             if (curr->solver->solver_type == SOLVER_REAL_CT &&
                 is_solver_real_direct_family(prev->solver->solver_type) &&
                 prev->twiddle->twiddle_buf_ptr == NULL)
@@ -2144,14 +2325,17 @@ static FFTZ_VOID setup_twiddle_buffer_real(aoclfftz_solution_t *solution)
         }
     }
 #endif
+    return AOCLFFTZ_SUCCESS;
 }
 
 /**
  * @brief Walk the (post-setup) solution tree and record scratch sizes and
  * setup-time allocated scratch addresses into the handle's exec_metadata.
  *
- * For real plans, the walk enters the inner C2C sub-tree via nd_sol
- * and populates bluestein/ct_buf/sr pointers used by those solvers.
+ * For real plans, the walk enters the inner C2C sub-tree via complex_sol (a
+ * Bluestein's FFT child or a real N-D node's complex-dims subtree) or nd_sol
+ * (complex N-D) and populates bluestein/ct_buf/sr pointers used by those
+ * solvers.
  *
  * aoclfftz_execute always uses these setup-time buffers. In execute_io only the
  * owning thread reuses them; other concurrent callers allocate a fresh per-call
@@ -2159,13 +2343,14 @@ static FFTZ_VOID setup_twiddle_buffer_real(aoclfftz_solution_t *solution)
  *
  * Sizing rules:
  *   - bs_buffer_size / bluestein: sum of each Bluestein node's padded, disjoint
- *     slice (active_threads_at_level * bs_buf_size); each node records its start
- *     in bs_dim_offset. Once the total size is known, the end of setup allocates
- *     the shared bs_in/bs_out pool (bs_buffer_size each), and each per-call
- *     execute_io allocates two matching regions of bs_buffer_size each.
+ *     slice (active_threads_at_level * bs_buf_size); each node records its
+ * start in bs_dim_offset. Once the total size is known, the end of setup
+ * allocates the shared bs_in/bs_out pool (bs_buffer_size each), and each
+ * per-call execute_io allocates two matching regions of bs_buffer_size each.
  *   - sr_input_copy_size: max SR input_copy_size across all SR nodes.
  *   - ct_buffer_total_size: registers the largest CT buffer size across the CT
- *     scratch owners NDIM/BUFFERED/CTL1D only one among them allocates the pool.
+ *     scratch owners NDIM/BUFFERED/CTL1D only one among them allocates the
+ * pool.
  *   - aux_buffered_pool_size: REAL_BUFFERED's padded
  *     active_threads_at_level * aux_buf_size_per_thread, plus a trailing
  *     dt_bytes to mirror the setup-time allocation. Both setup and each
@@ -2176,9 +2361,12 @@ static FFTZ_VOID setup_twiddle_buffer_real(aoclfftz_solution_t *solution)
  *   - c2c_strides_pool_size: one MAX_REAL_KERNEL_RADIX-entry slot per thread
  *     that may run the C2C kernels of a single-threaded real Direct CT node.
  *   - transpose_aux_size: the standalone-transpose node's bitmap size
+ *   - real_packed_buffer_size: padded in-place C2R separate slot times the
+ *     active threads at the packed node. Zero for R2C and out-of-place C2R.
  *
  * @param sol       Pointer to the root solution node of the plan tree to walk
- * @param metadata  Pointer to the execution metadata struct to populate with scratch sizes
+ * @param metadata  Pointer to the execution metadata struct to populate with
+ * scratch sizes
  */
 static FFTZ_VOID compute_exec_metadata(
                                     aoclfftz_solution_t *sol,
@@ -2194,6 +2382,12 @@ static FFTZ_VOID compute_exec_metadata(
     if (sol->dft_bufs->nd_sol != NULL)
     {
         compute_exec_metadata(sol->dft_bufs->nd_sol, metadata);
+    }
+    // complex_sol holds a complex subtree off the next_sol chain: a Bluestein's
+    // FFT child, or a real N-D node's complex-dims subtree.
+    if (sol->dft_bufs->complex_sol != NULL)
+    {
+        compute_exec_metadata(sol->dft_bufs->complex_sol, metadata);
     }
     if (sol->dft_bufs->sr != NULL)
     {
@@ -2334,6 +2528,29 @@ static FFTZ_VOID compute_exec_metadata(
             sol->dft_bufs->transpose->aux_mem->data;
     }
 
+    // Packed scratch is only the in-place C2R separate dest (and that child's
+    // OOP input). R2C never needs it: recombine may overwrite the child output.
+    if (stype == SOLVER_REAL_PACKED_C2R &&
+        !IS_OUT_OF_PLACE(sol->decomp_scheme->flags))
+    {
+        // Batch wrappers share one packed solution template. Give every
+        // concurrently active invocation a padded slot selected by slot_idx.
+        FFTZ_UINTP slot_size = (FFTZ_UINTP)SOL_DT_SIZE(sol);
+        for (FFTZ_INT32 dim = 0; dim < sol->decomp_scheme->dim_rank; dim++)
+        {
+            slot_size *= (FFTZ_UINTP)sol->decomp_scheme->dims[dim].n;
+        }
+        slot_size = GET_PADDED_SIZE(slot_size);
+        sol->dft_bufs->pack_rdft->scratch_slot_bytes = slot_size;
+        FFTZ_UINTP size =
+            (FFTZ_UINTP)sol->decomp_scheme->thread_info->active_threads;
+        size *= slot_size;
+        if (size > metadata->real_packed_buffer_size)
+        {
+            metadata->real_packed_buffer_size = size;
+        }
+    }
+
     // Replicate the ct_buffer allocation size used by every CT scratch owner.
     // A CTL1D owns its pool only when no parent pool exists, so all owners share
     // the single ct_buf_base region. Setup-time allocation sizes:
@@ -2383,8 +2600,11 @@ static FFTZ_VOID compute_exec_metadata(
  *  BLUESTEIN/     — compute chirp FFT for this node; next_sol (the inner
  *  MT_BLUESTEIN     FFT(M) subtree) is then descended by the iterative step
  *                   below in case it itself contains another Bluestein node.
- *  NDIM/REAL_NDIM — recurse into nd_sol explicitly; its next_sol is then
- *                   descended by the iterative step below.
+ *  NDIM           — recurse into nd_sol explicitly (REAL_NDIM keeps its subtree
+ *                   on complex_sol, descended by the shared complex_sol step);
+ *                   next_sol is then descended by the iterative step below.
+ *  REAL_PACKED_*  — descend its complex child through the normal next_sol
+ *                   iterative step exactly once.
  *  SR             — skip entirely; split-radix is power-of-2 only, so its
  *                   descendants cannot contain Bluestein nodes.
  *  others         — fall through to the iterative step (descend next_sol).
@@ -2402,22 +2622,34 @@ static FFTZ_INT32 setup_chirp_fft(aoclfftz_solution_t *sol,
         if (sol->solver->solver_type == SOLVER_BLUESTEIN ||
             sol->solver->solver_type == SOLVER_MT_BLUESTEIN)
         {
-            FFTZ_INT32 ret = compute_chirp_fft(sol, sol->next_sol, ctx);
+            aoclfftz_solution_t *inner = sol->next_sol;
+            FFTZ_INT32 ret = compute_chirp_fft(sol, inner, ctx);
             if (ret != SOLVER_SUCCESS)
             {
                 AOCLFFTZ_ERROR(
                     "compute_chirp_fft failed for Bluestein node "
                     "(n=%ld, m=%ld)",
                     (long)sol->decomp_scheme->dims[0].n,
-                    (long)sol->next_sol->decomp_scheme->dims[0].n);
+                    (long)inner->decomp_scheme->dims[0].n);
                 return AOCLFFTZ_SETUP_FAILURE;
             }
         }
 
-        if ((sol->solver->solver_type == SOLVER_NDIM) ||
-            (sol->solver->solver_type == SOLVER_REAL_NDIM))
+        if (sol->solver->solver_type == SOLVER_NDIM)
         {
             FFTZ_INT32 ret = setup_chirp_fft(sol->dft_bufs->nd_sol, ctx);
+            if (ret != SELECTOR_SUCCESS)
+            {
+                return ret;
+            }
+        }
+
+        // complex_sol holds a complex subtree that is not on the next_sol
+        // chain: a Bluestein's FFT child, or a real N-D node's complex-dims
+        // subtree. Descend it so any nested chirps get set up.
+        if (sol->dft_bufs->complex_sol != NULL)
+        {
+            FFTZ_INT32 ret = setup_chirp_fft(sol->dft_bufs->complex_sol, ctx);
             if (ret != SELECTOR_SUCCESS)
             {
                 return ret;

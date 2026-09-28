@@ -138,6 +138,25 @@ FFTZ_INT32 allocate_and_setup_stride(aoclfftz_solution_t *sol,
     return SOLVER_SUCCESS;
 }
 
+/** Store a CT stage's strides on the node's dims[0]/vecs[0]. */
+FFTZ_VOID set_ct_stage_strides(aoclfftz_solution_t *sol,
+                               aoclfftz_realhelper_t *realhelper)
+{
+    base_strides_t element_strides = {1, 1};
+    base_strides_t vector_strides = {1, 1};
+    base_strides_t c2c_strides = {1, 1};
+
+    // Derives from the node's current dims[0] strides, so compute the new
+    // values before storing any of them back.
+    set_ct_base_strides(sol, *realhelper, &element_strides, &vector_strides,
+                        &c2c_strides);
+
+    sol->decomp_scheme->dims[0].in_stride = element_strides.in_stride;
+    sol->decomp_scheme->dims[0].out_stride = element_strides.out_stride;
+    sol->decomp_scheme->vecs[0].in_stride = vector_strides.in_stride;
+    sol->decomp_scheme->vecs[0].out_stride = vector_strides.out_stride;
+}
+
 /** Record the aux I/O roles of a Direct node in a CT problem
  *
  * The roles come from the node's position in the CT decomposition, independent

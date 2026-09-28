@@ -46,9 +46,9 @@ FFTZ_INT32 alloc_ndim_buffer(aoclfftz_solution_t *solution,
                              FFTZ_VOID **buffer_ptr);
 
 // Allocate one aligned slab for the per-call scratch regions (CT, BS, SR, the
-// two REAL_BUFFERED aux ping-pong pools, the REAL_NDIM aux pool and the
-// transpose bitmap) and point ctx at the carved sub-regions. On success,
-// *scratch_slab holds the slab (or NULL if no scratch is needed).
+// two REAL_BUFFERED aux ping-pong pools, the REAL_NDIM aux pool, packed C2R
+// slots and the transpose bitmap) and point ctx at the carved sub-regions.
+// On success, *scratch_slab holds the slab (or NULL if no scratch is needed).
 // Returns the allocation status.
 static inline aoclfftz_error_type alloc_per_call_scratch(
     aoclfftz_immutable_metadata_t *exec_meta, aoclfftz_mutable_ctx_t *ctx,
@@ -69,6 +69,8 @@ static inline aoclfftz_error_type alloc_per_call_scratch(
     FFTZ_UINTP pow2_buf_size      = exec_meta->pow2_buf_size;
     FFTZ_UINTP transpose_aux_size =
                                 GET_PADDED_SIZE(exec_meta->transpose_aux_size);
+    FFTZ_UINTP real_packed_buffer_size =
+        GET_PADDED_SIZE(exec_meta->real_packed_buffer_size);
 
     // Two Bluestein regions (bs_in_base, bs_out_base), two REAL_BUFFERED aux
     // ping-pong pools (aux_pool_base_1, aux_pool_base_2, each of
@@ -90,7 +92,8 @@ static inline aoclfftz_error_type alloc_per_call_scratch(
                        + c2c_strides_size
                        + sr_input_copy_size
                        + pow2_buf_size
-                       + transpose_aux_size;
+                       + transpose_aux_size
+                       + real_packed_buffer_size;
     if (total == 0)
     {
         return AOCLFFTZ_SUCCESS;
@@ -162,6 +165,11 @@ static inline aoclfftz_error_type alloc_per_call_scratch(
         ctx->transpose_aux_base = MOVE_ADDR(slab, offset);
         offset += transpose_aux_size;
     }
+    if (real_packed_buffer_size > 0)
+    {
+        ctx->real_packed_buf_base = MOVE_ADDR(slab, offset);
+        offset += real_packed_buffer_size;
+    }
     *scratch_slab = slab;
     return AOCLFFTZ_SUCCESS;
 }
@@ -175,7 +183,7 @@ FFTZ_VOID release_owned_real_buffered_aux(aoclfftz_solution_t *sol);
 FFTZ_VOID destroy_solution(aoclfftz_solution_t *sol);
 FFTZ_VOID destroy_decomp_scheme(aoclfftz_decomp_scheme_t *decomp_scheme);
 FFTZ_VOID destroy_bluestein(aoclfftz_bluestein_t *bluestein);
-FFTZ_UINTP calculate_max_buffer_size(aoclfftz_solution_t *sol);
+FFTZ_UINTP calculate_c2r_aux_buffer_size(aoclfftz_solution_t *sol);
 FFTZ_VOID destroy_pow2_iterative(aoclfftz_pow2_iterative_t *pow2_iterative);
 FFTZ_VOID destroy_pow2_fourstep(aoclfftz_pow2_fourstep_t *pow2_fourstep);
 #endif // MEMORY_MANAGER_H

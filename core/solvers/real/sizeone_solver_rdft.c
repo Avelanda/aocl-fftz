@@ -24,7 +24,7 @@
  * @param in_real [in] Pointer to input real data buffer
  * @param in_imag [in] Pointer to input imaginary data buffer (unused)
  * @param out_real [in,out] Pointer to output real data buffer
- * @param out_imag [in,out] Pointer to output imaginary data buffer (unused)
+ * @param out_imag [in,out] Pointer to output imaginary data buffer
  * @param batch [in] Number of batched transforms to execute
  * @param strides [in] Pointer to stride configuration for input/output access
  * @param UNUSED [in] Unused parameter (twiddle factors not needed for size 1)
@@ -41,6 +41,7 @@ static FFTZ_VOID execute_real_float_kernel(FFTZ_VOID *in_real,
     FFTZ_UINT32 dt_bytes = sizeof(FFTZ_FLOAT);
     FFTZ_FLOAT *in_r = (FFTZ_FLOAT *)in_real;
     FFTZ_FLOAT *out_r = (FFTZ_FLOAT *)out_real;
+    FFTZ_FLOAT *out_i = (FFTZ_FLOAT *)out_imag;
 
     if (flag == FORWARD_FFT_DIR)
     {
@@ -50,9 +51,10 @@ static FFTZ_VOID execute_real_float_kernel(FFTZ_VOID *in_real,
         for (FFTZ_INTP i = 0; i < batch; i++)
         {
             out_r[0] = in_r[0];
-            out_r[1] = 0.0f;
+            out_i[0] = 0.0f;
             in_r = MOVE_ADDR(in_r, v_in_stride);
             out_r = MOVE_ADDR(out_r, v_out_stride);
+            out_i = MOVE_ADDR(out_i, v_out_stride);
         }
     }
     else
@@ -81,7 +83,7 @@ static FFTZ_VOID execute_real_float_kernel(FFTZ_VOID *in_real,
  * @param in_real [in] Pointer to input real data buffer
  * @param in_imag [in] Pointer to input imaginary data buffer (unused)
  * @param out_real [in,out] Pointer to output real data buffer
- * @param out_imag [in,out] Pointer to output imaginary data buffer (unused)
+ * @param out_imag [in,out] Pointer to output imaginary data buffer
  * @param batch [in] Number of batched transforms to execute
  * @param strides [in] Pointer to stride configuration for input/output access
  * @param UNUSED [in] Unused parameter (twiddle factors not needed for size 1)
@@ -97,6 +99,7 @@ execute_real_double_kernel(FFTZ_VOID *in_real, FFTZ_VOID *in_imag,
     FFTZ_UINT32 dt_bytes = sizeof(FFTZ_DOUBLE);
     FFTZ_DOUBLE *in_r = (FFTZ_DOUBLE *)in_real;
     FFTZ_DOUBLE *out_r = (FFTZ_DOUBLE *)out_real;
+    FFTZ_DOUBLE *out_i = (FFTZ_DOUBLE *)out_imag;
 
     if (flag == FORWARD_FFT_DIR)
     {
@@ -107,9 +110,10 @@ execute_real_double_kernel(FFTZ_VOID *in_real, FFTZ_VOID *in_imag,
         for (FFTZ_INTP i = 0; i < batch; i++)
         {
             out_r[0] = in_r[0];
-            out_r[1] = 0.0;
+            out_i[0] = 0.0;
             in_r = MOVE_ADDR(in_r, v_in_stride);
             out_r = MOVE_ADDR(out_r, v_out_stride);
+            out_i = MOVE_ADDR(out_i, v_out_stride);
         }
     }
     else
@@ -196,13 +200,21 @@ static FFTZ_INT32 execute_real_sizeone_solver_internal(aoclfftz_solution_t *sol,
 
     v_in_stride = sol->decomp_scheme->vecs[vec_rank - 1].in_stride * dt_bytes;
     v_out_stride = sol->decomp_scheme->vecs[vec_rank - 1].out_stride * dt_bytes;
+
+    if (FFT_DIR(ctx->flags) == FORWARD_FFT_DIR)
+    {
+        v_out_stride *= DATA_STRIDE;   // R2C: complex output
+    }
+    else
+    {
+        v_in_stride *= DATA_STRIDE;    // C2R: complex input
+    }
+
     for (batch = 0; batch < sol->decomp_scheme->vecs[vec_rank - 1].n; batch++)
     {
-        aoclfftz_mutable_ctx_t inner_ctx = batch_ctx;
-
         // recursive call to solve the inner batches
         status = execute_real_sizeone_solver_internal(sol, vec_rank - 1,
-                                                      &inner_ctx);
+                                                      &batch_ctx);
         if (status != SOLVER_SUCCESS)
         {
             return status;
@@ -235,8 +247,10 @@ static FFTZ_INT32 execute_real_sizeone_solver(aoclfftz_solution_t *sol,
 {
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Enter");
 
-    // inplace check
-    if (!IS_OUT_OF_PLACE(ctx->flags) && FFT_DIR(ctx->flags))
+    // An ND real sub-problem inherits the in-place flag but reads from an
+    // auxiliary buffer, so even in an in-place problem the copy to the output
+    // must run whenever the buffers do not match.
+    if (FFT_DIR(ctx->flags) && ctx->in_real == ctx->out_real)
     {
         return SOLVER_SUCCESS;
     }

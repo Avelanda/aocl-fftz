@@ -22,16 +22,19 @@
 /**
  * @brief Sets up the Bluestein solver with extended length buffers.
  *
- * Initializes the next solution object with extended length m and allocates
- * the required internal buffers.
+ * Initializes the next solution object with extended length m, allocates the
+ * internal buffers (B and B_out), binds the Bluestein step kernels, and
+ * precomputes the chirp sequence into B.
  *
  * @param[in,out] sol      Current solution object
  * @param[out]    next_sol Next solution to configure
  * @param[in]     m        Extended length (must be >= 2*n-1 and factorable)
+ * @param[in]     kt       Kernel tables for binding the Bluestein step kernels
  * @return FFTZ_INT32 SOLVER_SUCCESS on success, error code on failure
  */
 FFTZ_INT32 setup_bluestein_solver(aoclfftz_solution_t *sol,
-                             aoclfftz_solution_t *next_sol, FFTZ_INTP m)
+                                  aoclfftz_solution_t *next_sol, FFTZ_INTP m,
+                                  kernel_tables_t *kt)
 {
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Enter");
 
@@ -53,6 +56,15 @@ FFTZ_INT32 setup_bluestein_solver(aoclfftz_solution_t *sol,
         GET_PADDED_SIZE((FFTZ_INTP)m * DATA_STRIDE * dt_bytes);
     ret = alloc_bluestein_buffers(sol->dft_bufs->bluestein, bs_buf_size);
     if (ret != AOCLFFTZ_SUCCESS)
+    {
+        return ret;
+    }
+
+    bind_bluestein_mul_kernels(sol, kt);
+
+    // Precompute chirp sequence into B once at plan time; execute reuses it.
+    ret = compute_chirp_sequence(sol, m);
+    if (ret != BLUESTEIN_SUCCESS)
     {
         return ret;
     }
@@ -136,8 +148,8 @@ static FFTZ_INT32 execute_bluestein_solver(aoclfftz_solution_t *sol,
     // ct_offset anyway to avoid invalid values downstream.
     bs_ctx.ct_offset = 0;
 
-    // Two-level split of the shared bs pool: bs_dim_offset selects this dim's slice,
-    // then bs_buf_size * slot_idx picks this thread's slot within it.
+    // Two-level split of the shared bs pool: bs_dim_offset selects this dim's
+    // slice, then bs_buf_size * slot_idx picks this thread's slot within it.
     FFTZ_INTP bs_buf_offset = bluestein->bs_dim_offset +
                               bluestein->bs_buf_size * ctx->slot_idx;
 

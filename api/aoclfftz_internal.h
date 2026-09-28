@@ -75,7 +75,8 @@
 #define DT_PRECISION_FLAG(flags) (flags >> 30)
 
 // Set Flags
-#define SET_PRECISION(flags, val) (flags = (flags & 0x3FFFFFFF) | (val << 30))
+#define SET_PRECISION(flags, val)                                              \
+    (flags = (flags & 0x3FFFFFFF) | ((FFTZ_UINT32)(val) << 30))
 #define SET_INPLACE(flags) SET_BIT_FLAG32(flags, 0, 0)
 #define SET_OUTOFPLACE(flags) SET_BIT_FLAG32(flags, 0, 1)
 
@@ -92,6 +93,14 @@
 #define SET_BUFFERED(flags) SET_BIT_FLAG32(flags, 11, 1)
 #define UNSET_BUFFERED(flags) SET_BIT_FLAG32(flags, 11, 0)
 #define IS_BUFFERED(flags) GET_BIT_FLAG32(flags, 11)
+
+// Marks a Bluestein node used as the real (R2HC/HC2R) stage inside a CT +
+// Bluestein decomposition. It must output the packed n-real format the CT
+// combine stage expects, not the n/2+1 complex points a standalone Bluestein
+// returns to the caller. Read at plan time to pick the packed conversion
+// kernels.
+#define SET_BLUESTEIN_CT_STAGE(flags) SET_BIT_FLAG32(flags, 12, 1)
+#define IS_BLUESTEIN_CT_STAGE(flags) GET_BIT_FLAG32(flags, 12)
 
 // Per-node I/O role for the REAL (R2C/C2R) execute path. Storing the role
 // (fixed at setup) instead of an absolute pointer keeps the tree read-only, so
@@ -133,6 +142,17 @@
 // Move the base address of void pointer by adding offset
 #define MOVE_ADDR(base_addr, offset)                                           \
     (FFTZ_VOID *)((FFTZ_CHAR *)base_addr + offset)
+
+/**
+ * @brief Swap the buffers of two pointers
+ *
+ */
+#define SWAP_BUFFERS(buf1, buf2)                                               \
+    do {                                                                       \
+        FFTZ_VOID *temp_buffer_for_swap = (buf1);                              \
+        (buf1) = (buf2);                                                       \
+        (buf2) = temp_buffer_for_swap;                                         \
+    } while (0)
 
 #define IS_POW2(x) (((x) & ((x) - 1)) == 0)
 
@@ -226,6 +246,7 @@ typedef struct aoclfftz_buffered aoclfftz_buffered_t;
 typedef struct aoclfftz_sr aoclfftz_sr_t;
 typedef struct aoclfftz_pow2_iterative aoclfftz_pow2_iterative_t;
 typedef struct aoclfftz_pow2_fourstep aoclfftz_pow2_fourstep_t;
+typedef struct aoclfftz_pack_rdft aoclfftz_pack_rdft_t;
 typedef struct aoclfftz_executor aoclfftz_executor_t;
 typedef struct aoclfftz_realhelper aoclfftz_realhelper_t;
 
@@ -254,12 +275,16 @@ typedef struct aoclfftz_mutable_ctx
                                      // MAX_REAL_KERNEL_RADIX-entry slot per thread
                                      // that may run their C2C kernels
     FFTZ_VOID *transpose_aux_base;   // Standalone-transpose visited-cell bitmap
+    FFTZ_VOID *real_packed_buf_base; // In-place C2R packed scratch slot pool
     FFTZ_INTP ct_offset;             // Byte offset into the ct_buffer,
                                      // accumulated per-thread by mt_batched
     FFTZ_UINT32 flags;               // Plan flags (direction, precision, etc.)
     FFTZ_INT32 slot_idx;             // Slices bs_[in/out]_base for Bluestein/MT_Bluestein,
                                      // the aux pools for REAL_BUFFERED/REAL_NDIM
                                      // and c2c_strides_base for real Direct CT.
+    FFTZ_INTP batch_idx;             // Current batch set by the batched solver
+                                     // loop; the real Bluestein uses it as the
+                                     // group index into its banded/aux layout.
 } aoclfftz_mutable_ctx_t;
 
 // Per-handle scratch byte sizes & the immutable execution context recorded at
@@ -286,6 +311,7 @@ typedef struct aoclfftz_immutable_metadata
     FFTZ_UINTP c2c_strides_pool_size;   // Real direct solvers' C2C stride
                                         // scratch pool
     FFTZ_UINTP transpose_aux_size;      // Standalone-transpose bitmap size
+    FFTZ_UINTP real_packed_buffer_size; // In-place C2R packed scratch pool size
     aoclfftz_mutable_ctx_t base_ctx;    // execution context built at setup time
     FFTZ_INT32 setup_buffers_acquired;  // 0 = setup-time buffers free; whoever
                                         // grabs them flips to 1, so others
@@ -398,9 +424,16 @@ typedef struct aoclfftz_decomp_scheme
     //   bit 8     : (0) no-transpose / (1) transpose
     //   bit 9     : (0) (transpose+fft) / (1) fft (no transpose)
     //   bit 10    : (0) innermost dimension / (1) not innermost dimension (of
-    //   ND-dim problem) bit 11    : (0) not buffered / (1) buffered bit 16    :
-    //   (0) fixed selector mode / (1) auto tuner selector mode bit 30-31 :
-    //   floating point datatype precision
+    //               ND-dim problem)
+    //   bit 11    : (0) not buffered / (1) buffered
+    //   bit 12    : (0) not a Bluestein CT stage / (1) Bluestein as a CT
+    //               stage. When set, the real Bluestein node is embedded as
+    //               a Cooley-Tukey stage and exchanges a packed half-complex
+    //               spectrum with its neighbours instead of the caller's
+    //               n/2+1 complex points. Clear on every other node (a
+    //               standalone Bluestein, Direct, CT, N-D, ...).
+    //   bit 16    : (0) fixed selector mode / (1) auto tuner selector mode
+    //   bit 30-31 : floating point datatype precision
     //               (00) 8-bit / (01) 16-bit / (10) 32-bit / (11) 64-bit
     FFTZ_UINT32 flags;
     // Real forward R2C post-process: precomputed DC/Nyquist imag slot indices.
@@ -444,19 +477,33 @@ typedef FFTZ_VOID (*elementwise_mul_fused_norm_)(FFTZ_VOID *out, FFTZ_VOID *a,
                                                  FFTZ_DOUBLE factor,
                                                  FFTZ_INTP out_stride);
 
-// Conversion kernels for the real Bluestein solver, which operates on complex
-// data and therefore converts its input on entry and its result on exit.
-// Selected per plan from cpu_flags and precision.
+// Conversion kernels for the real Bluestein solver, which works on complex
+// data and so converts its input on entry and its result on exit. Selected per
+// plan from cpu_flags and precision.
 //
-// Each name reads source2destination, where r denotes reals, c denotes
-// complex (all n points) and hc denotes half complex (the n/2+1 points that
-// represent a real spectrum). All share the signature (dst, src, n, stride):
+// Each name reads source2destination, where r is reals, c is complex (all n
+// points) and hc is half complex (the n/2+1 points of a real spectrum):
 //   r2c  : n reals -> n complex, imaginary parts zeroed
-//   c2hc : retains the first n/2+1 points, discards the remainder
+//   c2hc : keep the first n/2+1 points, drop the rest
 //   hc2c : n/2+1 points -> all n, via X[n-k] = conj(X[k])
 //   c2r  : n complex -> the real part of each
+//
+// The two "_packed" variants (c2hc_packed / hc2c_packed) are used by a
+// Bluestein standing in for a stage of a composite CT decomposition. They
+// read/write the same layout the real R2HC Direct they replace would: a DC
+// band, a Nyquist band (even radix only), then the interior conjugate pairs
+// (see core/solvers/real/direct_solver_rdft.c).
+//
+// All variants share one signature, so the same node fields (cast_to_complex /
+// cast_from_complex) can hold either kind. Each uses only the arguments it
+// needs:
+//   - plain variants walk a strided buffer using `elem_stride`;
+//   - packed variants place each band using the stage's R2HC stride table
+//     `strides` and the `group` (sub-transform) index.
 typedef FFTZ_VOID (*type_convert_)(FFTZ_VOID *dst, FFTZ_VOID *src, FFTZ_INTP n,
-                                   FFTZ_INTP stride);
+                                   FFTZ_INTP elem_stride,
+                                   aoclfftz_strides_t *strides,
+                                   FFTZ_INTP group);
 
 // Fused four-step inter-step twiddle + transpose in a single pass over the
 // n1 x n2 source: every element is read once and written once, and the
@@ -468,6 +515,11 @@ typedef FFTZ_VOID (*fused_twiddle_transpose_)(FFTZ_VOID *in, FFTZ_VOID *out,
                                         FFTZ_VOID *twiddles, FFTZ_INTP n1,
                                         FFTZ_INTP n2, FFTZ_INTP in_row_stride,
                                         FFTZ_INTP out_row_stride);
+
+// Function pointer shared by packed 1D and 3D recombine/separate kernels.
+typedef FFTZ_VOID (*pack_rdft_)(FFTZ_VOID *out, const FFTZ_VOID *in,
+                                const FFTZ_VOID *tw,
+                                const aoclfftz_pack_rdft_t *params);
 
 // Holds the Bluestein chirp sequence B and its FFT B_out (computed once
 // during plan setup), plus elementwise-multiply/fused_norm_multiply kernels
@@ -485,9 +537,10 @@ typedef struct aoclfftz_bluestein
     elementwise_mul_ mul[NUM_FFT_DIRS];
     // Step 3: (1/m) * output * chirp (post_mul[] on B);
     elementwise_mul_fused_norm_ post_mul[NUM_FFT_DIRS];
-    // Conversion kernels for a real Bluestein node; NULL on complex nodes. A
-    // plan executes a single direction, so the selector binds only the pair
-    // that direction requires.
+    // Conversion kernels for a real Bluestein node (NULL on complex nodes);
+    // the selector binds the pair for this plan's direction -- packed on a CT
+    // stage's spectrum side, plain strided otherwise (see
+    // selector_bluestein_rdft).
     // problem layout -> n complex, pre-process
     type_convert_ cast_to_complex;
     // n complex -> problem layout, post-process
@@ -681,18 +734,47 @@ typedef struct aoclfftz_pow2_fourstep
                            // (active_threads * 2 * buf_bytes)
 } aoclfftz_pow2_fourstep_t;
 
+// Solution-owned kernels and metadata for packed real 1D and 3D transforms.
+//
+// One outer row:
+//   cout has width n0_by2 and stride cout_row_stride.
+//   HC has width and stride n0_by2 + 1.
+//
+// Rank 3 forms conjugate pairs between outer coordinates (i1, i2) and their
+// mirrors.
+typedef struct aoclfftz_pack_rdft
+{
+    pack_rdft_ pack_rdft;      // default 1D/3D execute kernel pointer
+    pack_rdft_ pack_rdft_1d;       // 1D kernel pointer for 3D self-conj rows
+    FFTZ_INTP n0_by2;              // N0 / 2; cout row width in complex values
+    FFTZ_INTP n1;                  // rank-3 outer dimension 1
+    FFTZ_INTP n2;                  // rank-3 outer dimension 2
+    FFTZ_INTP cout_row_stride;     // stride between packed child-output rows
+    FFTZ_UINTP scratch_slot_bytes; // padded in-place C2R scratch slot size
+} aoclfftz_pack_rdft_t;
+
 /////////////////////////// BUFS RELATED : START //////////////////////////////
 typedef struct aoclfftz_dft_bufs
 {
     aoclfftz_bluestein_t* bluestein;
     aoclfftz_buffered_t* buffered;
     aoclfftz_transpose_t* transpose;
-    aoclfftz_solution_t* nd_sol; // may hold one of the solutions of ND
+    // Holds one of the solutions of an N-D decomposition; only for complex
+    // problems.
+    aoclfftz_solution_t* nd_sol;
+    // Holds the complex sub-tree of a real problem. Specifically:
+    //   - if it is a Bluestein node, it holds the inner complex FFT(prime)
+    //     child that computes the convolution;
+    //   - if it is an N-D node, it holds the complex-dims sub-solution.
+    // Kept here (instead of on the next_sol chain) so next_sol stays free for
+    // the next real stage. NULL otherwise.
+    aoclfftz_solution_t* complex_sol;
     aoclfftz_sr_t *sr;
     aoclfftz_pow2_iterative_t* pow2_iterative;
     // four-step pow2 solver specific data (sub-FFT setups + buffers);
     // heap-allocated on demand (NULL otherwise)
     aoclfftz_pow2_fourstep_t* pow2_fourstep;
+    aoclfftz_pack_rdft_t* pack_rdft; // packed 1D/3D kernels and strides
     FFTZ_VOID *ct_buffer; // auxiliary buffer for CT problems
     FFTZ_VOID *ct_buf_real; // real part of ct_buffer
     FFTZ_VOID *ct_buf_imag; // imaginary part of ct_buffer
@@ -732,6 +814,10 @@ typedef struct aoclfftz_realhelper
     FFTZ_UINT8 is_last_stage;
     FFTZ_UINT8 is_CT;
     FFTZ_UINT8 is_buffered_invoked;
+    /** Groups a packed CT-stage Bluestein child strides over. Its Batched
+     * parent collapses vecs[0].n to 1 for selection, so it stashes the count
+     * here for the child's stride build. Zero for non-packed stages. */
+    FFTZ_INTP packed_group_count;
 } aoclfftz_realhelper_t;
 
 execute_ register_execute_dft(FFTZ_VOID);

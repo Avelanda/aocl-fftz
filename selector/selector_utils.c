@@ -23,31 +23,12 @@ FFTZ_INT32 copy_decomp_scheme( aoclfftz_decomp_scheme_t *to_ds,
 {
     to_ds->vec_rank = from_ds->vec_rank;
     to_ds->dim_rank = from_ds->dim_rank;
-    FFTZ_INT32 cnt, idx = 0;
+    FFTZ_INT32 cnt;
     for (cnt = 0; cnt < from_ds->dim_rank; cnt++)
     {
-        if (from_ds->dims[cnt].n != 1)
-        {
-            to_ds->dims[idx].n =
-                from_ds->dims[cnt].n;
-            to_ds->dims[idx].in_stride =
-                from_ds->dims[cnt].in_stride;
-            to_ds->dims[idx].out_stride =
-                from_ds->dims[cnt].out_stride;
-            idx++;
-        }
-    }
-    /* Gets Executed in scenario where the shrinked dim_rank is one
-       and the problem size is also one.
-       Example: 1x1x1 or 1 */
-    if (idx == 0)
-    {
-        to_ds->dims[0].n =
-            from_ds->dims[0].n;
-        to_ds->dims[0].in_stride =
-            from_ds->dims[0].in_stride;
-        to_ds->dims[0].out_stride =
-            from_ds->dims[0].out_stride;
+        to_ds->dims[cnt].n = from_ds->dims[cnt].n;
+        to_ds->dims[cnt].in_stride = from_ds->dims[cnt].in_stride;
+        to_ds->dims[cnt].out_stride = from_ds->dims[cnt].out_stride;
     }
     for (cnt = 0; cnt < from_ds->vec_rank; cnt++)
     {
@@ -248,6 +229,18 @@ FFTZ_INT32 copy_solution_obj( aoclfftz_solution_t *to_sol_obj,
         from_sol_obj->dft_bufs->buffered->aux_buf_size_per_thread;
     // Borrower after copy; only the node that malloc'd the pool keeps ownership.
     to_sol_obj->dft_bufs->buffered->is_aux_buffer_allocated = 0;
+    to_sol_obj->dft_bufs->pack_rdft->pack_rdft =
+        from_sol_obj->dft_bufs->pack_rdft->pack_rdft;
+    to_sol_obj->dft_bufs->pack_rdft->pack_rdft_1d =
+        from_sol_obj->dft_bufs->pack_rdft->pack_rdft_1d;
+    to_sol_obj->dft_bufs->pack_rdft->n0_by2 =
+        from_sol_obj->dft_bufs->pack_rdft->n0_by2;
+    to_sol_obj->dft_bufs->pack_rdft->n1 = from_sol_obj->dft_bufs->pack_rdft->n1;
+    to_sol_obj->dft_bufs->pack_rdft->n2 = from_sol_obj->dft_bufs->pack_rdft->n2;
+    to_sol_obj->dft_bufs->pack_rdft->cout_row_stride =
+        from_sol_obj->dft_bufs->pack_rdft->cout_row_stride;
+    to_sol_obj->dft_bufs->pack_rdft->scratch_slot_bytes =
+        from_sol_obj->dft_bufs->pack_rdft->scratch_slot_bytes;
     to_sol_obj->dft_bufs->ct_buffer =
         from_sol_obj->dft_bufs->ct_buffer;
     to_sol_obj->decomp_scheme->thread_info->active_threads =
@@ -732,6 +725,18 @@ FFTZ_VOID copy_solution_obj_wo_dims( aoclfftz_solution_t *to_sol_obj,
         from_sol_obj->dft_bufs->buffered->aux_buffer_2;
     to_sol_obj->dft_bufs->buffered->aux_buf_size_per_thread =
         from_sol_obj->dft_bufs->buffered->aux_buf_size_per_thread;
+    to_sol_obj->dft_bufs->pack_rdft->pack_rdft =
+        from_sol_obj->dft_bufs->pack_rdft->pack_rdft;
+    to_sol_obj->dft_bufs->pack_rdft->pack_rdft_1d =
+        from_sol_obj->dft_bufs->pack_rdft->pack_rdft_1d;
+    to_sol_obj->dft_bufs->pack_rdft->n0_by2 =
+        from_sol_obj->dft_bufs->pack_rdft->n0_by2;
+    to_sol_obj->dft_bufs->pack_rdft->n1 = from_sol_obj->dft_bufs->pack_rdft->n1;
+    to_sol_obj->dft_bufs->pack_rdft->n2 = from_sol_obj->dft_bufs->pack_rdft->n2;
+    to_sol_obj->dft_bufs->pack_rdft->cout_row_stride =
+        from_sol_obj->dft_bufs->pack_rdft->cout_row_stride;
+    to_sol_obj->dft_bufs->pack_rdft->scratch_slot_bytes =
+        from_sol_obj->dft_bufs->pack_rdft->scratch_slot_bytes;
     to_sol_obj->dft_bufs->ct_buffer =
         from_sol_obj->dft_bufs->ct_buffer;
     to_sol_obj->dft_bufs->ct_buf_real =
@@ -749,29 +754,49 @@ FFTZ_VOID swap_real_ct_solutions(aoclfftz_selector_t *sel)
     aoclfftz_solution_t *curr = sel->solution;
     aoclfftz_solution_t *prev = NULL;
     aoclfftz_solution_t *next = NULL;
+
+    // Packed / real-Bluestein: next_sol is a complex plan, not a real
+    // CT/Direct chain. Leave the tree alone for every execution-order mode.
+    if (curr == NULL || curr->solver == NULL ||
+        real_solver_has_complex_subproblem(curr->solver->solver_type))
+    {
+        return;
+    }
+
     if (sel->solution->next_sol != NULL)
     {
         /* swap first CT node */
         if (sel->solution->solver->solver_type == SOLVER_REAL_CT &&
             (is_solver_real_direct_family(
+                 sel->solution->next_sol->solver->solver_type) ||
+             is_solver_real_batched_family(
                  sel->solution->next_sol->solver->solver_type)))
         {
-            sel->solution = curr->next_sol;
-            curr->next_sol = sel->solution->next_sol;
-            sel->solution->next_sol = curr;
+            aoclfftz_solution_t *stage = curr->next_sol;
+            sel->solution = stage;
+            curr->next_sol = get_next_real_stage(stage);
+            set_next_real_stage(stage, curr);
         }
         /* swap remaining CT nodes */
         prev = curr;
         curr = curr->next_sol;
         while (curr && curr->next_sol)
         {
+            // A later real-Bluestein (or packed) node owns a complex
+            // subtree; stop rather than treat that child as real CT.
+            if (curr->solver == NULL ||
+                real_solver_has_complex_subproblem(curr->solver->solver_type))
+            {
+                break;
+            }
             next = curr->next_sol;
             if (curr->solver->solver_type == SOLVER_REAL_CT &&
-                is_solver_real_direct_family(next->solver->solver_type))
+                (is_solver_real_direct_family(next->solver->solver_type) ||
+                 is_solver_real_batched_family(next->solver->solver_type)))
             {
                 prev->next_sol = next;
-                curr->next_sol = next->next_sol;
-                next->next_sol = curr;
+                curr->next_sol = get_next_real_stage(next);
+                set_next_real_stage(next, curr);
             }
             prev = curr;
             curr = curr->next_sol;

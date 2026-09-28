@@ -325,7 +325,7 @@
  */
 union zero_negate_128
 {
-    unsigned u[4];
+    FFTZ_UINT32 u[4];
     __m128 s;
     __m128d d;
 };

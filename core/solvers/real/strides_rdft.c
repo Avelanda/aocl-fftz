@@ -343,7 +343,9 @@ FFTZ_VOID set_ct_base_strides(aoclfftz_solution_t *sol,
             aoclfftz_realhelper_t realhelper, base_strides_t *element_strides,
             base_strides_t *vector_strides, base_strides_t *c2c_stride)
 {
-    FFTZ_INTP batch = sol->decomp_scheme->vecs[0].n;
+    FFTZ_INTP batch = realhelper.packed_group_count != 0
+                          ? realhelper.packed_group_count
+                          : sol->decomp_scheme->vecs[0].n;
     FFTZ_INTP radix = sol->decomp_scheme->dims[0].n;
 
     FFTZ_UINT32 is_backward =

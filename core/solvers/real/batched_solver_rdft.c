@@ -15,14 +15,15 @@
 #include "core/solvers/solver.h"
 
 FFTZ_INT32 setup_real_batched_solver(aoclfftz_solution_t *sol,
-                                aoclfftz_solution_t *next_sol,
-                                aoclfftz_realhelper_t *realhelper)
+                                     aoclfftz_solution_t *next_sol,
+                                     aoclfftz_realhelper_t *realhelper)
 {
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Enter");
 
+    set_packed_child_group_count(sol, next_sol, realhelper);
 
     // Turn the vector problem into a single set/unit problem to find its
-    // solution if it is not a direct problem
+    // solution if it is not a direct problem.
     next_sol->decomp_scheme->vec_rank = 1;
     next_sol->decomp_scheme->vecs[0].n = 1;
 
@@ -46,10 +47,9 @@ FFTZ_INT32 setup_real_batched_solver(aoclfftz_solution_t *sol,
 }
 
 // Recursively solves batched RFFT by handling the innermost dimension first.
-FFTZ_INT32 execute_real_batched_solver_internal(aoclfftz_solution_t *sol,
-                                           aoclfftz_solution_t *next_sol,
-                                           FFTZ_INTP vec_rank,
-                                           aoclfftz_mutable_ctx_t *ctx)
+static FFTZ_INT32 execute_real_batched_solver_internal(
+    aoclfftz_solution_t *sol, aoclfftz_solution_t *next_sol,
+    FFTZ_INTP vec_rank, aoclfftz_mutable_ctx_t *ctx)
 {
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Enter");
 
@@ -73,6 +73,7 @@ FFTZ_INT32 execute_real_batched_solver_internal(aoclfftz_solution_t *sol,
 
         for (FFTZ_INTP b = 0; b < batches; b++)
         {
+            batch_ctx.batch_idx = b;
             status = next_sol->solver->execute_solver(next_sol, &batch_ctx);
             if (status != SOLVER_SUCCESS)
             {
@@ -125,6 +126,22 @@ static FFTZ_INT32 execute_real_batched_solver(aoclfftz_solution_t *sol,
     status = execute_real_batched_solver_internal(sol, next_sol,
                                                   sol->decomp_scheme->vec_rank,
                                                   ctx);
+
+    // A Batched -> Bluestein pair is one real CT stage. The loop above ran the
+    // Bluestein sub-solver once per batch; every batch must finish before the
+    // aux pools are swapped and the next stage starts.
+    if (status == SOLVER_SUCCESS &&
+        IS_BLUESTEIN_CT_STAGE(sol->decomp_scheme->flags))
+    {
+        SWAP_BUFFERS(ctx->aux_pool_base_1, ctx->aux_pool_base_2);
+#if REAL_FFT_EXECUTION_ORDER != REAL_FFT_ORDER_TRUE_RECURSION
+        aoclfftz_solution_t *next_stage = get_next_real_stage(sol);
+        if (next_stage != NULL)
+        {
+            status = next_stage->solver->execute_solver(next_stage, ctx);
+        }
+#endif
+    }
 
     AOCLFFTZ_LOG(TRACE, global_logger_mode, "Exit");
     return status;
