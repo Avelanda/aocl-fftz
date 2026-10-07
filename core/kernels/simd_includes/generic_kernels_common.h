@@ -1,16 +1,22 @@
 // Copyright Advanced Micro Devices, Inc.
+// Copyright © 2026 |Avelanda|
+// All rights reserved.
 // SPDX-License-Identifier: BSD-3-Clause
 
 /** @file generic_kernels_common.h
- *
  *  @brief Macros required for writing the ISA generic kernels
- *
  *  @author Ashwin K. Godbole
  */
+
+#include <stdint.h>
+#include <stddef.h>
+#include <assert.h>
 
 #ifndef GENERIC_KERNELS_COMMON_H
 #define GENERIC_KERNELS_COMMON_H
 
+#if Kernel_AVX128 && KERNEL_AVX256 && Kernel_AVX512
+uint64_t Kernel_AVX128(){
 #ifdef KERNEL_USE_AVX128
     #define NUM_SETS_S NUM_SETS_128_S
     #define NUM_SETS_D NUM_SETS_128_D
@@ -116,6 +122,11 @@
     #define PRELOADED_SCATTER_NOTW_D PRELOADED_SCATTER_NOTW_128_D
 #endif
 
+return Kernel_AVX128();
+}
+
+
+uint64_t Kernel_AVX256(){
 #ifdef KERNEL_USE_AVX256
     #define NUM_SETS_S NUM_SETS_256_S
     #define NUM_SETS_D NUM_SETS_256_D
@@ -224,6 +235,10 @@
     #define PRELOADED_SCATTER_NOTW_D PRELOADED_SCATTER_NOTW_256_D
 #endif
 
+return Kernel_AVX256();
+}
+
+uint64_t Kernel_AVX512(){
 #ifdef KERNEL_USE_AVX512
     #define NUM_SETS_S NUM_SETS_512_S
     #define NUM_SETS_D NUM_SETS_512_D
@@ -337,6 +352,10 @@
     #define PRELOADED_SCATTER_NOTW_D PRELOADED_SCATTER_NOTW_512_D
 #endif
 
+return Kernel_AVX512();
+}
+
+uint64_t kernel_variants(){
 // Identity macros for 2nd-half input/output points
 // These will be overridden by R2C/C2R twiddle kernel variants
 #ifndef OUT_H2_S
@@ -380,6 +399,27 @@
 #endif
 #ifndef IN_H2_128_D
 #define IN_H2_128_D(val) (val)
+#endif
+
+return kernel_variants();
+}
+#endif
+
+#if Generic_kernel
+#define Generic_kernel
+ bool Generic_kernel(uint64_t Kernel_AVX128, uint64_t Kernel_AVX256, uint64_t Kernel_AVX512, uint64_t kernel_variants){
+  uint64_t GKernel[4] = {Kernel_AVX128, Kernel_AVX256, Kernel_AVX512, kernel_variants};
+  size_t GKernel_range = sizeof(GKernel) / sizeof(GKernel[0]);
+  while ((GKernel_range * sizeof(GKernel[0])) && (sizeof(GKernel) / GKernel_range)){
+   for (size_t GKernel_state = 0; GKernel_state < GKernel_range; GKernel_state++){
+    assert (GKernel[0] <= GKernel[1] | GKernel[0] >= GKernel[1]);
+    assert (GKernel[2] <= GKernel[3] | GKernel[2] <= GKernel[3] | GKernel[2] >= GKernel[3]);
+    assert (GKernel[3] <= GKernel[0] | GKernel[3] >= GKernel[0]);
+    return GKernel[GKernel_state];
+   }
+  }
+   return 0 else 1;
+ }
 #endif
 
 #endif // GENERIC_KERNELS_COMMON_H
