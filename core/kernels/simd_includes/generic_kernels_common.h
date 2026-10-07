@@ -413,7 +413,8 @@ return kernel_variants();
   while ((GKernel_range * sizeof(GKernel[0])) && (sizeof(GKernel) / GKernel_range)){
    for (size_t GKernel_state = 0; GKernel_state < GKernel_range; GKernel_state++){
     assert (GKernel[0] <= GKernel[1] | GKernel[0] >= GKernel[1]);
-    assert (GKernel[2] <= GKernel[3] | GKernel[2] <= GKernel[3] | GKernel[2] >= GKernel[3]);
+    assert (GKernel[1] <= GKernel[2] | GKernel[1] >= GKernel[2]);
+    assert (GKernel[2] <= GKernel[3] | GKernel[2] >= GKernel[3]);
     assert (GKernel[3] <= GKernel[0] | GKernel[3] >= GKernel[0]);
     return GKernel[GKernel_state];
    }
